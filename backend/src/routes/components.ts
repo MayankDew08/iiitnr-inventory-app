@@ -448,25 +448,10 @@ function validateCsvStructure(
   return { columnFields, dataRows };
 }
 
-async function handleImportComponentsCsv(
-  app: { log: { error: (err: unknown) => void } },
-  req: FastifyRequest,
-  reply: FastifyReply,
-) {
-  const csvContent = extractCsvContent(req);
-
-  if (!csvContent) {
-    return reply.code(400).send({ error: 'CSV content is required' });
-  }
-
-  const structure = validateCsvStructure(parseCsv(csvContent));
-
-  if ('error' in structure) {
-    return reply.code(400).send({ error: structure.error });
-  }
-
-  const { columnFields, dataRows } = structure;
-
+function parseCsvRows(
+  dataRows: string[][],
+  columnFields: (keyof CsvCellMap | null)[],
+): { validInputs: ValidCsvComponentInput[]; errors: CsvRowError[] } {
   const validInputs: ValidCsvComponentInput[] = [];
   const errors: CsvRowError[] = [];
 
@@ -523,6 +508,28 @@ async function handleImportComponentsCsv(
 
     validInputs.push(input as ValidCsvComponentInput);
   }
+
+  return { validInputs, errors };
+}
+
+async function handleImportComponentsCsv(
+  app: { log: { error: (err: unknown) => void } },
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const csvContent = extractCsvContent(req);
+
+  if (!csvContent) {
+    return reply.code(400).send({ error: 'CSV content is required' });
+  }
+
+  const structure = validateCsvStructure(parseCsv(csvContent));
+
+  if ('error' in structure) {
+    return reply.code(400).send({ error: structure.error });
+  }
+
+  const { validInputs, errors } = parseCsvRows(structure.dataRows, structure.columnFields);
 
   if (errors.length > 0) {
     return reply.code(400).send({ error: 'import failed', details: errors });
