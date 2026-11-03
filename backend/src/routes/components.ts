@@ -422,6 +422,32 @@ function extractCsvContent(req: FastifyRequest): string | null {
   return csvContent;
 }
 
+function validateCsvStructure(
+  rows: string[][],
+):
+  | { columnFields: (keyof CsvCellMap | null)[]; dataRows: string[][] }
+  | { error: string } {
+  const headerRow = rows[0];
+
+  if (!headerRow) {
+    return { error: 'CSV must contain a header row' };
+  }
+
+  const columnFields = headerRow.map(mapCsvHeader);
+
+  if (!columnFields.includes('name')) {
+    return { error: "CSV must contain a 'Name' column" };
+  }
+
+  const dataRows = rows.slice(1);
+
+  if (dataRows.length > MAX_IMPORT_ROWS) {
+    return { error: `CSV cannot contain more than ${MAX_IMPORT_ROWS} data rows` };
+  }
+
+  return { columnFields, dataRows };
+}
+
 async function handleImportComponentsCsv(
   app: { log: { error: (err: unknown) => void } },
   req: FastifyRequest,
@@ -433,26 +459,13 @@ async function handleImportComponentsCsv(
     return reply.code(400).send({ error: 'CSV content is required' });
   }
 
-  const parsedRows = parseCsv(csvContent);
-  const headerRow = parsedRows[0];
+  const structure = validateCsvStructure(parseCsv(csvContent));
 
-  if (!headerRow) {
-    return reply.code(400).send({ error: 'CSV must contain a header row' });
+  if ('error' in structure) {
+    return reply.code(400).send({ error: structure.error });
   }
 
-  const columnFields = headerRow.map(mapCsvHeader);
-
-  if (!columnFields.includes('name')) {
-    return reply.code(400).send({ error: "CSV must contain a 'Name' column" });
-  }
-
-  const dataRows = parsedRows.slice(1);
-
-  if (dataRows.length > MAX_IMPORT_ROWS) {
-    return reply
-      .code(400)
-      .send({ error: `CSV cannot contain more than ${MAX_IMPORT_ROWS} data rows` });
-  }
+  const { columnFields, dataRows } = structure;
 
   const validInputs: ValidCsvComponentInput[] = [];
   const errors: CsvRowError[] = [];
