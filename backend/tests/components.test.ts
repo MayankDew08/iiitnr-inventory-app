@@ -638,6 +638,206 @@ describe('Component CRUD API', () => {
         assert.ok(Array.isArray(body.details));
         assert.ok(body.details[0].message.includes('cannot be greater than'));
       });
+
+      test('returns 400 when a row has a blank name cell', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          'CsvGood Part,Desc,Sensors,IoT Lab,5,5',
+          ',Has no name,Sensors,IoT Lab,5,5',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.equal(body.error, 'import failed');
+        assert.deepEqual(body.details, [{ row: 2, message: 'name is required' }]);
+
+        const getResponse = await app.inject({
+          method: 'GET',
+          url: '/components',
+          headers: { authorization: `Bearer ${adminToken}` },
+        });
+        const components = getResponse.json().components;
+        const imported = components.filter(
+          (c: { name: string }) => c.name === 'CsvGood Part',
+        );
+        assert.equal(imported.length, 0);
+      });
+
+      test('returns 400 when a name is only spaces', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          '   ,Only spaces,Sensors,IoT Lab,5,5',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.deepEqual(body.details, [{ row: 1, message: 'name is required' }]);
+      });
+
+      test('returns 400 when totalQuantity is not a number', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          'CsvBad Total,Desc,Sensors,IoT Lab,abc,5',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.deepEqual(body.details, [
+          { row: 1, message: 'totalQuantity must be a non-negative integer' },
+        ]);
+      });
+
+      test('returns 400 when availableQuantity is not a number', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          'CsvBad Available,Desc,Sensors,IoT Lab,5,xyz',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.deepEqual(body.details, [
+          { row: 1, message: 'availableQuantity must be a non-negative integer' },
+        ]);
+      });
+
+      test('returns 400 when totalQuantity is not a whole number', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          'CsvBad Decimal,Desc,Sensors,IoT Lab,2.5,2',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.deepEqual(body.details, [
+          { row: 1, message: 'totalQuantity must be a non-negative integer' },
+        ]);
+      });
+
+      test('imports CSV sent as JSON body { csv }', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'application/json',
+          },
+          payload: { csv: 'Name,Total Quantity\nCsvJson Part,3' },
+        });
+
+        assert.equal(response.statusCode, 201);
+        const body = response.json();
+        assert.equal(body.imported, 1);
+        assert.equal(body.components[0].name, 'CsvJson Part');
+        assert.equal(body.components[0].totalQuantity, 3);
+        assert.equal(body.components[0].availableQuantity, 3);
+        await deleteComponents(body.components.map((c: { id: string }) => c.id));
+      });
+
+      test('returns 400 when JSON body csv is empty', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'application/json',
+          },
+          payload: { csv: '' },
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.equal(body.error, 'CSV content is required');
+      });
+
+      test('reports every bad row and counts blank rows in row numbers', async () => {
+        const csv = [
+          'Name,Description,Category,Location,Total Quantity,Available Quantity',
+          'CsvOk Part,Desc,Sensors,IoT Lab,5,5',
+          ',,,,,',
+          'CsvBad Category,Desc,NotACategory,IoT Lab,5,5',
+          'CsvBad Negative,Desc,Sensors,IoT Lab,-1,0',
+        ].join('\n');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/components/import/csv',
+          headers: {
+            authorization: `Bearer ${adminToken}`,
+            'content-type': 'text/csv',
+          },
+          body: csv,
+        });
+
+        assert.equal(response.statusCode, 400);
+        const body = response.json();
+        assert.equal(body.error, 'import failed');
+        assert.equal(body.details.length, 2);
+        assert.equal(body.details[0].row, 3);
+        assert.ok(body.details[0].message.includes('invalid category'));
+        assert.deepEqual(body.details[1], {
+          row: 4,
+          message: 'totalQuantity must be a non-negative integer',
+        });
+
+        const getResponse = await app.inject({
+          method: 'GET',
+          url: '/components',
+          headers: { authorization: `Bearer ${adminToken}` },
+        });
+        const components = getResponse.json().components;
+        const imported = components.filter((c: { name: string }) => c.name === 'CsvOk Part');
+        assert.equal(imported.length, 0);
+      });
     });
   });
 
