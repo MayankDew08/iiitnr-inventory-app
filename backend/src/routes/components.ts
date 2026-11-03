@@ -512,6 +512,38 @@ function parseCsvRows(
   return { validInputs, errors };
 }
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function insertCsvComponents(
+  tx: DbTransaction,
+  inputs: ValidCsvComponentInput[],
+): Promise<ComponentRecord[]> {
+  const inserted: ComponentRecord[] = [];
+  const now = new Date().toISOString();
+  for (const input of inputs) {
+    const [record] = await tx
+      .insert(component)
+      .values({
+        id: crypto.randomUUID(),
+        name: input.name,
+        description: input.description || null,
+        imageUrl: input.imageUrl || null,
+        totalQuantity: input.totalQuantity ?? 0,
+        availableQuantity: input.availableQuantity ?? input.totalQuantity ?? 0,
+        category: input.category ? (input.category as CategoryValue) : null,
+        location: input.location ? toLocationEnum(input.location) : null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+    if (!record) {
+      throw new Error('failed to import component row');
+    }
+    inserted.push(record);
+  }
+  return inserted;
+}
+
 async function handleImportComponentsCsv(
   app: { log: { error: (err: unknown) => void } },
   req: FastifyRequest,
@@ -536,32 +568,7 @@ async function handleImportComponentsCsv(
   }
 
   try {
-    const created = await db.transaction(async (tx) => {
-      const inserted: ComponentRecord[] = [];
-      const now = new Date().toISOString();
-      for (const input of validInputs) {
-        const [record] = await tx
-          .insert(component)
-          .values({
-            id: crypto.randomUUID(),
-            name: input.name,
-            description: input.description || null,
-            imageUrl: input.imageUrl || null,
-            totalQuantity: input.totalQuantity ?? 0,
-            availableQuantity: input.availableQuantity ?? input.totalQuantity ?? 0,
-            category: input.category ? (input.category as CategoryValue) : null,
-            location: input.location ? toLocationEnum(input.location) : null,
-            createdAt: now,
-            updatedAt: now,
-          })
-          .returning();
-        if (!record) {
-          throw new Error('failed to import component row');
-        }
-        inserted.push(record);
-      }
-      return inserted;
-    });
+    const created = await db.transaction((tx) => insertCsvComponents(tx, validInputs));
 
     for (const record of created) {
       await logAudit(
