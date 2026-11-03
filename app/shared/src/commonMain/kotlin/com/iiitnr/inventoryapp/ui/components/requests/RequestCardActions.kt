@@ -268,7 +268,7 @@ private fun RequestLifecycleActionRow(
     showRenew: Boolean = true,
     qrContentDescription: String = "Show QR for LA to scan when returning items",
 ) {
-    val hasReturnableItems = request.items.any { (it.fulfilledQuantity - it.returnedQuantity) > 0 }
+    val hasReturnableItems = request.items.any { it.fulfilledQuantity - it.returnedQuantity > 0 }
 
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (showRenew && !isFaculty && onRequestRenew != null) {
