@@ -544,6 +544,21 @@ async function insertCsvComponents(
   return inserted;
 }
 
+async function auditCsvImport(req: FastifyRequest, records: ComponentRecord[]): Promise<void> {
+  for (const record of records) {
+    await logAudit(
+      {
+        userId: getUserIdFromRequest(req),
+        action: AuditActionType.CREATE,
+        entityType: 'Component',
+        entityId: record.id,
+        newValues: record as Record<string, unknown>,
+      },
+      req,
+    );
+  }
+}
+
 async function handleImportComponentsCsv(
   app: { log: { error: (err: unknown) => void } },
   req: FastifyRequest,
@@ -570,18 +585,7 @@ async function handleImportComponentsCsv(
   try {
     const created = await db.transaction((tx) => insertCsvComponents(tx, validInputs));
 
-    for (const record of created) {
-      await logAudit(
-        {
-          userId: getUserIdFromRequest(req),
-          action: AuditActionType.CREATE,
-          entityType: 'Component',
-          entityId: record.id,
-          newValues: record as Record<string, unknown>,
-        },
-        req,
-      );
-    }
+    await auditCsvImport(req, created);
 
     return reply.code(201).send({ imported: created.length, components: created });
   } catch (err) {
