@@ -366,6 +366,8 @@ type CsvCellMap = Partial<
   >
 >;
 
+type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 function mapCsvHeader(header: string): keyof CsvCellMap | null {
   const normalized = header.trim().toLowerCase();
   switch (normalized) {
@@ -511,8 +513,6 @@ function parseCsvRows(
 
   return { validInputs, errors };
 }
-
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function insertCsvComponents(
   tx: DbTransaction,
