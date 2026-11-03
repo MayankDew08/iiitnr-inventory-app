@@ -407,11 +407,7 @@ function parseQuantityCell(
   return { value: parsed };
 }
 
-async function handleImportComponentsCsv(
-  app: { log: { error: (err: unknown) => void } },
-  req: FastifyRequest,
-  reply: FastifyReply,
-) {
+function extractCsvContent(req: FastifyRequest): string | null {
   const csvContent =
     typeof req.body === 'string'
       ? req.body
@@ -420,6 +416,20 @@ async function handleImportComponentsCsv(
         : undefined;
 
   if (!csvContent || csvContent.trim() === '') {
+    return null;
+  }
+
+  return csvContent;
+}
+
+async function handleImportComponentsCsv(
+  app: { log: { error: (err: unknown) => void } },
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const csvContent = extractCsvContent(req);
+
+  if (!csvContent) {
     return reply.code(400).send({ error: 'CSV content is required' });
   }
 
