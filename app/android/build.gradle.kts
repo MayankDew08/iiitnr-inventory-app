@@ -35,7 +35,7 @@ android {
 
     val hasReleaseSigning =
         project.hasProperty("RELEASE_KEYSTORE_PATH") ||
-            !System.getenv("RELEASE_KEYSTORE_PATH").orEmpty().isBlank()
+            System.getenv("RELEASE_KEYSTORE_PATH").orEmpty().isNotBlank()
     if (hasReleaseSigning) {
         signingConfigs {
             create("release") {
@@ -57,7 +57,6 @@ android {
     defaultConfig {
         applicationId = "com.iiitnr.inventoryapp"
         minSdk = 24
-        multiDexEnabled = true
         targetSdk = 37
         versionName = appVersion.get()
         versionCode = versionCodeFrom(versionName!!)

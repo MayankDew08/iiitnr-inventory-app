@@ -65,6 +65,8 @@ val webBrowserTaskNames =
         "wasmJsProductionExecutableCompileSync",
     )
 
-tasks.matching { it.name in webBrowserTaskNames }.configureEach {
+tasks.matching {
+    it.name in webBrowserTaskNames || it.name == "wasmJsProcessResources" || it.name == "wasmJsJar"
+}.configureEach {
     dependsOn(generateGoogleConfig)
 }

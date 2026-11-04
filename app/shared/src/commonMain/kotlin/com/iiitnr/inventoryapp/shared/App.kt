@@ -23,7 +23,6 @@ import com.iiitnr.inventoryapp.data.Version
 import com.iiitnr.inventoryapp.data.api.ApiClient
 import com.iiitnr.inventoryapp.data.api.AuthEvent
 import com.iiitnr.inventoryapp.data.api.AuthEventManager
-import com.iiitnr.inventoryapp.data.cache.ComponentsCache
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.ui.screens.AuditLogScreen
 import com.iiitnr.inventoryapp.ui.screens.ComponentsScreen
@@ -45,7 +44,6 @@ fun App(
     onExportComponentsCsv: ((String) -> Boolean)? = null,
     onExportRequestsCsv: ((String) -> Boolean)? = null,
     onImportComponentsCsv: (((String?) -> Unit) -> Unit)? = null,
-    componentsCache: ComponentsCache? = null,
     tokenManager: TokenManager = koinInject(),
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {

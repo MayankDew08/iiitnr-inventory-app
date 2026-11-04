@@ -426,9 +426,7 @@ function extractCsvContent(req: FastifyRequest): string | null {
 
 function validateCsvStructure(
   rows: string[][],
-):
-  | { columnFields: (keyof CsvCellMap | null)[]; dataRows: string[][] }
-  | { error: string } {
+): { columnFields: (keyof CsvCellMap | null)[]; dataRows: string[][] } | { error: string } {
   const headerRow = rows[0];
 
   if (!headerRow) {

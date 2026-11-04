@@ -667,9 +667,7 @@ describe('Component CRUD API', () => {
           headers: { authorization: `Bearer ${adminToken}` },
         });
         const components = getResponse.json().components;
-        const imported = components.filter(
-          (c: { name: string }) => c.name === 'CsvGood Part',
-        );
+        const imported = components.filter((c: { name: string }) => c.name === 'CsvGood Part');
         assert.equal(imported.length, 0);
       });
 

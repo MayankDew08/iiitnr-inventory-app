@@ -37,8 +37,9 @@ logs:
 
 test:
     just db-down
+    just install
     cd backend && podman-compose -f compose.db.yaml --profile test up -d
-    cd backend && bun test --parallel=1
+    export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/iiitnr_inventory_test"; cd backend && bun test --parallel=1
     cd backend && podman-compose -f compose.db.yaml --profile test down
 
 [unix]

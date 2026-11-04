@@ -19,8 +19,6 @@ suspend fun Throwable.toAppError(): AppError =
                 404 -> AppError.NotFound(errorMessage ?: "Resource")
                 else ->
                     AppError.ApiError(
-                        code = errorCode,
-                        status = status,
                         message = errorMessage ?: "API Error",
                     )
             }
@@ -39,8 +37,6 @@ suspend fun Throwable.toAppError(): AppError =
                 HttpStatusCode.NotFound -> AppError.NotFound(apiError?.error ?: "Resource")
                 else ->
                     AppError.ApiError(
-                        code = apiError?.code,
-                        status = status.value,
                         message = apiError?.error ?: "API Error",
                     )
             }

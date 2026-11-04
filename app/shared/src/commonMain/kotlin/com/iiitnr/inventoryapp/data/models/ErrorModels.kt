@@ -22,8 +22,6 @@ sealed class AppError(
     ) : AppError("Network error occurred")
 
     data class ApiError(
-        val code: String?,
-        val status: Int,
         override val message: String,
     ) : AppError(message)
 

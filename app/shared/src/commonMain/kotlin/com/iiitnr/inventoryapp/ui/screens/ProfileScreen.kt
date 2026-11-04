@@ -25,7 +25,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,12 +46,10 @@ fun ProfileScreen(
     onNavigateToUserManagement: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
-    notificationsViewModel: NotificationsViewModel = koinViewModel(),
 ) {
     val userData = viewModel.user
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
-    val scope = rememberCoroutineScope()
 
     val notificationsViewModel: NotificationsViewModel = koinViewModel()
 

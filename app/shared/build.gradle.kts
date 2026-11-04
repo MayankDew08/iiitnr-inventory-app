@@ -116,6 +116,7 @@ kotlin {
     wasmJs {
         browser {
         }
+        binaries.executable()
     }
 
     sourceSets {
@@ -125,17 +126,14 @@ kotlin {
                 kotlin.srcDir(generateBuildFlagsKt)
 
                 dependencies {
-                    val composeVersion = libs.versions.composeMultiplatform.get()
-
-                    implementation("org.jetbrains.compose.ui:ui-tooling-preview:$composeVersion")
-
-                    implementation("org.jetbrains.compose.runtime:runtime:$composeVersion")
-                    implementation("org.jetbrains.compose.ui:ui:$composeVersion")
-                    implementation("org.jetbrains.compose.foundation:foundation:$composeVersion")
-                    implementation("org.jetbrains.compose.material3:material3:${libs.versions.material3.get()}")
+                    implementation(libs.ui.tooling.preview)
+                    implementation(libs.runtime)
+                    implementation(libs.ui)
+                    implementation(libs.foundation)
+                    implementation(libs.material3)
+                    implementation(libs.components.resources)
 
                     implementation(libs.material.icons.extended)
-                    implementation("org.jetbrains.compose.components:components-resources:$composeVersion")
 
                     implementation(libs.ktor.client.core)
                     implementation(libs.ktor.client.content.negotiation)
