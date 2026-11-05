@@ -1132,6 +1132,47 @@ describe('Component CRUD API', () => {
 
       await deleteComponents([body.component.id]);
     });
+
+    test('does not create a component when STUDENT is rejected by requireAdminOrLA', async () => {
+      const beforeResp = await app.inject({
+        method: 'GET',
+        url: '/components',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      assert.equal(beforeResp.statusCode, 200);
+      const beforeCount = beforeResp.json().components.length;
+
+      const uniqueName = `AuthRaceGuard ${crypto.randomUUID()}`;
+      const response = await app.inject({
+        method: 'POST',
+        url: '/components',
+        headers: {
+          authorization: `Bearer ${studentToken}`,
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: uniqueName,
+          totalQuantity: 1,
+          availableQuantity: 1,
+        },
+      });
+
+      assert.equal(response.statusCode, 403);
+
+      const afterResp = await app.inject({
+        method: 'GET',
+        url: '/components',
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      assert.equal(afterResp.statusCode, 200);
+      const components = afterResp.json().components;
+      assert.equal(components.length, beforeCount);
+      assert.equal(
+        components.filter((c: { name: string }) => c.name === uniqueName).length,
+        0,
+        'STUDENT request should have been rejected before the handler could insert',
+      );
+    });
   });
 
   describe('PUT /components/:id - Update component', () => {
