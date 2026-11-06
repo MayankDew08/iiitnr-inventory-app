@@ -16,6 +16,12 @@ import {
   Location,
   UserRole,
 } from './helpers.js';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { ForbiddenError } from '../src/utils/errors.js';
+import { db } from '../src/drizzle/db.js';
+import { component } from '../src/drizzle/schema.js';
+import { eq } from 'drizzle-orm';
+import { requireAdminOrLA } from '../src/middleware/auth.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
 let adminToken: string;
@@ -1133,16 +1139,67 @@ describe('Component CRUD API', () => {
       await deleteComponents([body.component.id]);
     });
 
-    test('does not create a component when STUDENT is rejected by requireAdminOrLA', async () => {
-      const beforeResp = await app.inject({
-        method: 'GET',
-        url: '/components',
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      assert.equal(beforeResp.statusCode, 200);
-      const beforeCount = beforeResp.json().components.length;
+    test('short-circuits the handler before the component is inserted', async () => {
+      // A forbidden preHandler used to reply with 403 and return, which let the
+      // handler body run anyway because reply.send() is async. It has to throw
+      // instead so Fastify stops at the guard.
+      const studentReq = {
+        // Pretend jwtVerify already ran and attached a STUDENT role.
+        jwtVerify: async () => {
+          Object.assign(studentReq, { user: { sub: 'student-id', role: UserRole.STUDENT } });
+        },
+      } as unknown as FastifyRequest;
 
-      const uniqueName = `AuthRaceGuard ${crypto.randomUUID()}`;
+      let replied = false;
+      const reply = {
+        code() {
+          replied = true;
+          return this;
+        },
+        send() {
+          replied = true;
+          return this;
+        },
+      } as unknown as FastifyReply;
+
+      // Call the guard with both arguments the pre-fix signature accepted, so
+      // either implementation can run to completion here.
+      const callGuard = requireAdminOrLA as unknown as (
+        request: FastifyRequest,
+        reply: FastifyReply,
+      ) => Promise<unknown>;
+
+      await assert.rejects(
+        async () => {
+          await callGuard(studentReq, reply);
+          // Only reachable on the buggy path, where the guard replied but did
+          // not stop control flow. This stands in for the route handler body.
+          await db.insert(component).values({
+            id: crypto.randomUUID(),
+            name: 'inserted-by-buggy-guard-continuation',
+            totalQuantity: 1,
+            availableQuantity: 1,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        },
+        ForbiddenError,
+        'requireAdminOrLA must throw for STUDENT instead of replying and continuing',
+      );
+
+      assert.equal(replied, false, 'the guard must throw rather than send a reply');
+
+      // Belt and braces: the continuation path left nothing behind.
+      const continuationInserted = await db.query.component.findFirst({
+        where: eq(component.name, 'inserted-by-buggy-guard-continuation'),
+      });
+      assert.equal(
+        continuationInserted ?? null,
+        null,
+        'handler side effects must not have run after a forbidden guard',
+      );
+
+      // And the real route still answers the documented contract.
       const response = await app.inject({
         method: 'POST',
         url: '/components',
@@ -1151,27 +1208,13 @@ describe('Component CRUD API', () => {
           'content-type': 'application/json',
         },
         payload: {
-          name: uniqueName,
+          name: `AuthRaceGuard ${crypto.randomUUID()}`,
           totalQuantity: 1,
           availableQuantity: 1,
         },
       });
 
       assert.equal(response.statusCode, 403);
-
-      const afterResp = await app.inject({
-        method: 'GET',
-        url: '/components',
-        headers: { authorization: `Bearer ${adminToken}` },
-      });
-      assert.equal(afterResp.statusCode, 200);
-      const components = afterResp.json().components;
-      assert.equal(components.length, beforeCount);
-      assert.equal(
-        components.filter((c: { name: string }) => c.name === uniqueName).length,
-        0,
-        'STUDENT request should have been rejected before the handler could insert',
-      );
     });
   });
 
