@@ -98,18 +98,46 @@ function buildCorsOrigin(env: AppEnvironment, allowedOrigins: string[] | undefin
   return allowedOrigins ?? false;
 }
 
-function buildRateLimitConfig() {
+function buildRateLimitConfig(app: FastifyInstance) {
   return {
     global: true,
     max: 100,
     timeWindow: '1 minute',
-    keyGenerator: (request: FastifyRequest) => {
-      return request.headers.authorization || `ip:${request.ip}`;
+    // Bucket on the verified token subject, never on the raw Authorization
+    // header: an unauthenticated client can send any header value it likes, so
+    // keying on the header hands every request a fresh bucket. Unauthenticated
+    // and forged-token requests fall back to the client IP.
+    keyGenerator: async (request: FastifyRequest) => {
+      const token = readBearerToken(request);
+      if (token) {
+        try {
+          const payload = app.jwt.verify<{ sub?: string }>(token);
+          if (payload.sub) return `user:${payload.sub}`;
+        } catch {
+          /* invalid or expired token: fall back to the IP bucket */
+        }
+      }
+      return `ip:${request.ip}`;
     },
-    errorResponseBuilder: (_request: FastifyRequest, context: { ttl: number }) => ({
-      error: `Too many requests. Please wait ${Math.ceil(context.ttl / 1000)} seconds before retrying.`,
-    }),
+    // The plugin throws whatever this returns, so it has to be an Error carrying
+    // the status code; a bare object reaches the error handler with no status
+    // and is reported as a 500.
+    errorResponseBuilder: (_request: FastifyRequest, context: { ttl: number; statusCode: number }) => {
+      const error = new Error(
+        `Too many requests. Please wait ${Math.ceil(context.ttl / 1000)} seconds before retrying.`,
+      ) as Error & { statusCode: number; code: string };
+      error.statusCode = context.statusCode;
+      error.code = 'RATE_LIMITED';
+      return error;
+    },
   };
+}
+
+function readBearerToken(request: FastifyRequest): string | undefined {
+  const header = request.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return undefined;
+  const token = header.slice('Bearer '.length).trim();
+  return token.length > 0 ? token : undefined;
 }
 
 async function parseFormUrlEncoded(req: FastifyRequest, body: string) {
@@ -142,6 +170,40 @@ function formatSchemaError(
 function isLoopbackSocket(request: FastifyRequest): boolean {
   const addr = request.socket.remoteAddress;
   return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+// Behind Caddy (or any proxy on a private network) the connection address is the
+// proxy, so X-Forwarded-For has to be trusted for rate limiting and audit logs
+// to see the real client. Trusting only loopback/private peers keeps a direct
+// public connection from spoofing its address.
+function isProxyAddress(address: string): boolean {
+  const normalized = address.startsWith('::ffff:') ? address.slice('::ffff:'.length) : address;
+
+  if (normalized.includes(':')) {
+    const lower = normalized.toLowerCase();
+    return (
+      lower === '::1' ||
+      lower === '::' ||
+      lower.startsWith('fc') || // IPv6 unique-local
+      lower.startsWith('fd') ||
+      lower.startsWith('fe8') || // IPv6 link-local
+      lower.startsWith('fe9') ||
+      lower.startsWith('fea') ||
+      lower.startsWith('feb')
+    );
+  }
+
+  const octets = normalized.split('.').map((part) => Number.parseInt(part, 10));
+  if (octets.length !== 4 || octets.some((octet) => Number.isNaN(octet))) return false;
+
+  const [first, second] = octets as [number, number, number, number];
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
 }
 
 async function handleHttpsRedirect(request: FastifyRequest, reply: FastifyReply) {
@@ -249,7 +311,7 @@ async function registerPlugins(app: FastifyInstance, env: AppEnvironment) {
   });
 
   if (!env.isTest) {
-    await app.register(rateLimit, buildRateLimitConfig());
+    await app.register(rateLimit, buildRateLimitConfig(app));
   }
 
   await app.register(jwt, {
@@ -415,6 +477,7 @@ export async function buildApp() {
     bodyLimit: 11 * 1024 * 1024,
     logController: new LogController({ disableRequestLogging: true }),
     logger: buildLoggerConfig(env),
+    trustProxy: (address: string) => isProxyAddress(address),
   });
 
   await registerPlugins(app, env);
