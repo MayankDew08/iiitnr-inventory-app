@@ -22,6 +22,7 @@ val generatedBuildFlagsDir =
 val generateBuildFlagsKt =
     tasks.register("generateBuildFlagsKt") {
         description = "Generates BuildFlags for the App"
+        group = "build"
         val debug = isDebugBuild
         val outputDir = generatedBuildFlagsDir.get().asFile
 
@@ -47,6 +48,7 @@ val generateBuildFlagsKt =
 val generateVersionKt =
     tasks.register("generateVersionKt") {
         description = "Generates Version for the App"
+        group = "build"
         val versionInput = packageJsonFile.asFile
         val versionOutputDir = generatedVersionDir.get().asFile
 
@@ -90,10 +92,7 @@ kotlin {
         }
     }
 
-    val isMac =
-        org.gradle.internal.os.OperatingSystem
-            .current()
-            .isMacOsX
+    val isMac = System.getProperty("os.name").lowercase().contains("mac")
     if (isMac) {
         val xcf = XCFramework("shared")
         val iosTargets = listOf(iosArm64(), iosSimulatorArm64())

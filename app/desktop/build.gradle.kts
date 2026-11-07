@@ -42,8 +42,9 @@ kotlin {
 
 val googleConfigPropertiesFile = layout.projectDirectory.file("src/jvmMain/resources/google-desktop-config.properties").asFile
 
-tasks.register("populateGoogleConfig") {
+val populateGoogleConfig = tasks.register("populateGoogleConfig") {
     description = "Populates the google Config"
+    group = "build"
     val fileToPopulate = googleConfigPropertiesFile
 
     inputs.property(
@@ -92,7 +93,7 @@ tasks.register("populateGoogleConfig") {
 }
 
 tasks.named("jvmProcessResources") {
-    dependsOn("populateGoogleConfig")
+    inputs.files(googleConfigPropertiesFile)
 }
 
 compose.desktop {

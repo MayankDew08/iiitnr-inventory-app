@@ -1,4 +1,5 @@
 [tools]
+android-sdk = { version = "23.0", build-tools = "36.0.0", platforms = "android-37.0" }
 bun = "1.4"
 java = "temurin-25"
 just = "latest"
