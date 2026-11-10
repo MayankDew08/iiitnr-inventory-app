@@ -1060,7 +1060,7 @@ describe('Request API', () => {
       const req = await createRequest({
         userId: studentId,
         targetFacultyId: facultyId,
-        projectTitle: 'Fulfilled Test',
+        projectTitle: 'Issued Test',
         status: 'PENDING',
         items: [{ componentId: item.id, quantity: 1 }],
       });
@@ -1087,7 +1087,7 @@ describe('Request API', () => {
       const req = await createRequest({
         userId: studentId,
         targetFacultyId: facultyId,
-        projectTitle: 'Fulfilled Test',
+        projectTitle: 'Issued Test',
         status: 'APPROVED',
         items: [{ componentId: item.id, quantity: 1 }],
       });
@@ -1113,7 +1113,7 @@ describe('Request API', () => {
       const req = await createRequest({
         userId: studentId,
         targetFacultyId: facultyId,
-        projectTitle: 'Fulfilled Incremental Test',
+        projectTitle: 'Issued Incremental Test',
         status: 'APPROVED',
         items: [{ componentId: item.id, quantity: 3 }],
       });

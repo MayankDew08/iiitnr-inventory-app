@@ -35,6 +35,7 @@ val googleWebClientIdProvider =
 val generateGoogleConfig =
     tasks.register("generateGoogleConfig") {
         description = "Generates google-config.js with the Google Web OAuth client ID"
+        group = "build"
         val clientId = googleWebClientIdProvider
         inputs.property("GOOGLE_WEB_CLIENT_ID", clientId)
         val outputDir = layout.buildDirectory.dir("processedResources/wasmJs/main")

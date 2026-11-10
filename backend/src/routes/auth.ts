@@ -90,17 +90,90 @@ const loginSchema = {
   },
 } as const;
 
+// Roles a user may pick for themselves at Google sign-up. ADMIN is deliberately
+// absent: elevation to admin must go through an existing admin.
+const SELF_ASSIGNABLE_ROLES = [UserRole.STUDENT, UserRole.FACULTY, UserRole.LA] as const;
+
+function resolveSelfAssignedRole(requestedRole?: UserRoleValue): UserRoleValue | undefined {
+  if (!requestedRole) return undefined;
+  return (SELF_ASSIGNABLE_ROLES as readonly UserRoleValue[]).includes(requestedRole)
+    ? requestedRole
+    : undefined;
+}
+
 const googleSchema = {
   body: {
     type: 'object',
     required: ['idToken'],
     properties: {
       idToken: { type: 'string', maxLength: 4096 },
-      role: { type: 'string', enum: ['STUDENT', 'FACULTY', 'LA', 'ADMIN', 'PENDING'] },
+      role: { type: 'string', enum: [...SELF_ASSIGNABLE_ROLES] },
     },
     additionalProperties: false,
   },
 } as const;
+
+// Per-account throttling on top of the per-IP rate limit: a distributed or
+// slow-and-low attacker stays under the IP limit, so failures are also counted
+// per (email, client IP). Keying on the pair keeps one attacker from locking out
+// an account for everybody. In-memory and per-process, which is enough to slow
+// online guessing well past what bcrypt cost 12 already costs.
+const LOGIN_FAILURE_LIMIT = 5;
+const LOGIN_FAILURE_WINDOW_MS = 10 * 60 * 1000;
+const LOGIN_BLOCK_MS = 10 * 60 * 1000;
+const LOGIN_THROTTLE_MAX_ENTRIES = 10_000;
+
+interface LoginThrottleEntry {
+  failures: number[];
+  blockedUntil: number;
+}
+
+const loginThrottle = new Map<string, LoginThrottleEntry>();
+
+function loginThrottleKey(email: string, clientIp: string): string {
+  return `${email}|${clientIp}`;
+}
+
+function pruneLoginThrottle(now: number): void {
+  if (loginThrottle.size <= LOGIN_THROTTLE_MAX_ENTRIES) return;
+  for (const [key, entry] of loginThrottle.entries()) {
+    const idle =
+      entry.blockedUntil < now && entry.failures.every((at) => now - at >= LOGIN_FAILURE_WINDOW_MS);
+    if (idle) loginThrottle.delete(key);
+  }
+}
+
+function getLoginBlockRemainingMs(key: string): number {
+  const entry = loginThrottle.get(key);
+  if (!entry) return 0;
+
+  const now = Date.now();
+  if (entry.blockedUntil > now) return entry.blockedUntil - now;
+
+  entry.failures = entry.failures.filter((at) => now - at < LOGIN_FAILURE_WINDOW_MS);
+  if (entry.failures.length === 0) loginThrottle.delete(key);
+  return 0;
+}
+
+function recordLoginFailure(key: string): void {
+  const now = Date.now();
+  const entry = loginThrottle.get(key) ?? { failures: [], blockedUntil: 0 };
+
+  entry.failures = entry.failures.filter((at) => now - at < LOGIN_FAILURE_WINDOW_MS);
+  entry.failures.push(now);
+
+  if (entry.failures.length >= LOGIN_FAILURE_LIMIT) {
+    entry.blockedUntil = now + LOGIN_BLOCK_MS;
+    entry.failures = [];
+  }
+
+  loginThrottle.set(key, entry);
+  pruneLoginThrottle(now);
+}
+
+function clearLoginFailures(key: string): void {
+  loginThrottle.delete(key);
+}
 
 function getGoogleClientIds(): GoogleClientIds | null {
   const primaryClientId = process.env.GOOGLE_CLIENT_ID;
@@ -225,7 +298,7 @@ function parseGoogleAuthError(err: unknown): ValidationError {
 
 function findUserByEmail(email: string) {
   return db.query.user.findFirst({
-    columns: { ...userPublicColumns, passwordHash: true },
+    columns: { ...userPublicColumns, passwordHash: true, googleId: true },
     where: (u, { eq }) => eq(u.email, email),
   });
 }
@@ -286,13 +359,13 @@ function buildGoogleUserCreatePayload(
     name: name ?? undefined,
     googleId,
     imageUrl,
-    role: requestedRole ?? derived?.role ?? UserRole.PENDING,
+    role: resolveSelfAssignedRole(requestedRole) ?? derived?.role ?? UserRole.PENDING,
     batch: derived?.batch ?? null,
     branch: derived?.branch ?? null,
   };
 }
 
-async function findOrCreateGoogleUser(
+export async function findOrCreateGoogleUser(
   googleId: string,
   email: string,
   name: string | null,
@@ -301,7 +374,7 @@ async function findOrCreateGoogleUser(
 ): Promise<UserResponse> {
   const normalizedEmail = email.trim().toLowerCase();
   const existingUser = await db.query.user.findFirst({
-    columns: { ...userPublicColumns, googleId: true },
+    columns: { ...userPublicColumns, googleId: true, passwordHash: true },
     where: (u, { eq, or }) => or(eq(u.googleId, googleId), eq(u.email, normalizedEmail)),
   });
 
@@ -322,14 +395,19 @@ async function findOrCreateGoogleUser(
       })
     : {};
 
+  // Linking a Google identity to an account that still carries a password would
+  // let whoever set that password keep signing in as the Google user, so the
+  // stored password hash is dropped as part of the link.
+  const mustClearPassword = !existingUser.googleId && existingUser.passwordHash != null;
+
   const needsProfileUpdate = Object.keys(profileUpdates).length > 0;
   const needsGoogleMetadataUpdate =
     !existingUser.googleId ||
     (name != null && existingUser.name !== name) ||
     (imageUrl != null && existingUser.imageUrl !== imageUrl);
 
-  if (!needsProfileUpdate && !needsGoogleMetadataUpdate) {
-    return existingUser;
+  if (!needsProfileUpdate && !needsGoogleMetadataUpdate && !mustClearPassword) {
+    return toUserResponse(existingUser);
   }
 
   const [updated] = await db
@@ -342,6 +420,7 @@ async function findOrCreateGoogleUser(
             imageUrl: imageUrl ?? existingUser.imageUrl,
           }
         : {}),
+      ...(mustClearPassword ? { passwordHash: null } : {}),
       ...profileUpdates,
       updatedAt: new Date().toISOString(),
     })
@@ -418,20 +497,32 @@ async function handleLogin(
   }
 
   const { email, password } = validation;
+  const throttleKey = loginThrottleKey(email, req.ip);
+  const blockedMs = getLoginBlockRemainingMs(throttleKey);
+  if (blockedMs > 0) {
+    return reply.code(429).send({
+      error: `too many failed login attempts. Try again in ${Math.ceil(blockedMs / 60_000)} minute(s).`,
+    });
+  }
+
   const found = await findUserByEmail(email);
 
   if (!found) {
+    recordLoginFailure(throttleKey);
     return reply.code(401).send({ error: 'invalid credentials' });
   }
 
-  if (!found.passwordHash) {
+  if (!found.passwordHash || found.googleId) {
     return reply.code(401).send({ error: 'this account uses Google Sign-In' });
   }
 
   const matches = await compare(password, found.passwordHash);
   if (!matches) {
+    recordLoginFailure(throttleKey);
     return reply.code(401).send({ error: 'invalid credentials' });
   }
+
+  clearLoginFailures(throttleKey);
 
   if (found.role === UserRole.PENDING) {
     return reply.code(403).send({ error: 'account pending approval by admin' });

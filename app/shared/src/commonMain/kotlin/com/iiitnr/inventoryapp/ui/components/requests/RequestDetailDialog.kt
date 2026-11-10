@@ -317,7 +317,7 @@ private fun RequestDetailDatesFlow(
         request.fulfilledAt?.let {
             DateItem(
                 icon = Icons.Default.CheckCircle,
-                label = "Fulfilled",
+                label = "Issued",
                 value = formatDisplayDate(it),
                 tint = MaterialTheme.colorScheme.primary,
             )

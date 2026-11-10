@@ -312,7 +312,7 @@ internal fun buildRequestsCsv(requests: List<Request>): String {
                     val name = item.component?.name ?: item.componentId
                     val parts = mutableListOf("Req:${item.quantity}")
                     if (item.fulfilledQuantity > 0) {
-                        parts.add("Ful:${item.fulfilledQuantity}")
+                        parts.add("Iss:${item.fulfilledQuantity}")
                     }
                     if (item.returnedQuantity > 0) {
                         parts.add("Ret:${item.returnedQuantity}")

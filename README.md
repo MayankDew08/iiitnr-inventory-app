@@ -81,9 +81,9 @@ For all other versions and full release history, visit the [GitHub Releases](htt
 ### 🔄 Multi-State Issue, Return & Renewal System
 - **Project Nominated Issues:** Students issue items under specific project titles and name a nominating `FACULTY` supervisor.
 - **Resumable Drafts:** The request a student is assembling is kept on the device, so a restart, a crash or an app killed in the background never loses the selected items, quantities, project title or supervisor.
-- **QR-Based Fulfillment:** Admins and LAs can fulfill and return requests instantly by scanning a student's unique Request QR code.
+- **QR-Based Fulfillment:** Admins and LAs can issue and return requests instantly by scanning a student's unique Request QR code.
 - **Fulfillment & Due Tracking:** Approved requests are fulfilled by admins/LAs, automatically setting a 30-day return due date (`returnDueAt`).
-- **Auto-Expiry:** Fulfilled or renewed requests past their `returnDueAt` are automatically marked `EXPIRED` by a periodic background sweep.
+- **Auto-Expiry:** Issued or renewed requests past their `returnDueAt` are automatically marked `EXPIRED` by a periodic background sweep.
 - **Request Renewals:** Students can submit renewal requests with a detailed reason, allowing nominating faculty or admins/LAs to extend the due date by another 30 days.
 - **Automatic Stock Restocking:** Returning components automatically increments `availableQuantity` on the backend, checking against `totalQuantity`.
 - **Partial Issue & Return:** Admins/LAs can issue/return specific quantities per item when stock is limited or partial returns occur. Requests track `fulfilledQuantity` per item with `PARTIALLY_ISSUED` and `PARTIALLY_RETURNED` statuses, enabling multi-step fulfillment and granular inventory control.

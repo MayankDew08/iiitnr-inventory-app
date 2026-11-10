@@ -98,10 +98,9 @@ android {
 
 androidComponents {
     onVariants { variant ->
-        val verName = appVersion.get()
         variant.outputs.forEach { output ->
             if (output is com.android.build.api.variant.impl.VariantOutputImpl) {
-                output.outputFileName.set("com.iiitnr.inventoryapp-$verName.apk")
+                output.outputFileName.set(appVersion.map { verName -> "com.iiitnr.inventoryapp-$verName.apk" })
             }
         }
     }

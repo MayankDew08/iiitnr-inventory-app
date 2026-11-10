@@ -2,10 +2,11 @@ import './test-setup.js';
 
 import { describe, test, beforeAll, afterAll } from 'bun:test';
 import assert from 'node:assert/strict';
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { buildApp } from '../src/app.js';
 import { db } from '../src/drizzle/db.js';
 import { user, auditLog } from '../src/drizzle/schema.js';
+import { findOrCreateGoogleUser } from '../src/routes/auth.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
 const createdUserIds: string[] = [];
@@ -200,6 +201,82 @@ describe('Authentication API', () => {
       assert.equal(response.statusCode, 401);
       assert.ok(response.json().error.includes('uses Google Sign-In'));
     });
+
+    test('refuses password login for an account linked to Google', async () => {
+      const email = `linked_${crypto.randomUUID()}@example.com`;
+      const { hash } = await import('bcryptjs');
+      const passwordHash = await hash('correctpassword', 12);
+      const now = new Date().toISOString();
+
+      // A linked account must not keep a usable password, even if a stale hash
+      // survived (for example from before the link was made).
+      const [created] = await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          email,
+          passwordHash,
+          googleId: 'google-linked-1',
+          name: 'Linked User',
+          role: 'STUDENT',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (created) createdUserIds.push(created.id);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: {
+          email,
+          password: 'correctpassword',
+        },
+      });
+
+      assert.equal(response.statusCode, 401);
+      assert.ok(response.json().error.includes('uses Google Sign-In'));
+    });
+
+    test('throttles repeated failures for the same account', async () => {
+      const email = `throttle_${crypto.randomUUID()}@example.com`;
+      const { hash } = await import('bcryptjs');
+      const passwordHash = await hash('correctpassword', 12);
+      const now = new Date().toISOString();
+
+      const [created] = await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          email,
+          passwordHash,
+          name: 'Throttle User',
+          role: 'STUDENT',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (created) createdUserIds.push(created.id);
+
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const failed = await app.inject({
+          method: 'POST',
+          url: '/auth/login',
+          payload: { email, password: 'wrongpassword' },
+        });
+        assert.equal(failed.statusCode, 401);
+      }
+
+      // The correct password is refused while the account is throttled.
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        payload: { email, password: 'correctpassword' },
+      });
+
+      assert.equal(blocked.statusCode, 429);
+      assert.ok(blocked.json().error.includes('too many failed login attempts'));
+    });
   });
 
   describe('GET /auth/me', () => {
@@ -272,7 +349,63 @@ describe('Authentication API', () => {
     });
   });
 
+  describe('Google account linking', () => {
+    test('clears an existing password when Google is linked to the account', async () => {
+      const email = `prelink_${crypto.randomUUID()}@iiitnr.edu.in`;
+      const { hash } = await import('bcryptjs');
+      const passwordHash = await hash('attackerpassword', 12);
+      const now = new Date().toISOString();
+
+      const [created] = await db
+        .insert(user)
+        .values({
+          id: crypto.randomUUID(),
+          email,
+          passwordHash,
+          name: 'Pre-registered',
+          role: 'PENDING',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (created) createdUserIds.push(created.id);
+
+      await findOrCreateGoogleUser('google-sub-link-1', email, 'Real Owner', null);
+
+      const [linked] = await db.select().from(user).where(eq(user.email, email));
+      assert.ok(linked);
+      assert.equal(linked.googleId, 'google-sub-link-1');
+      assert.equal(linked.passwordHash, null, 'pre-set password must not survive the link');
+    });
+
+    test('never grants ADMIN from a client-supplied role', async () => {
+      const email = `escalate_${crypto.randomUUID()}@iiitnr.edu.in`;
+
+      const created = await findOrCreateGoogleUser(
+        'google-sub-escalate',
+        email,
+        'Escalation Attempt',
+        null,
+        'ADMIN' as never,
+      );
+      createdUserIds.push(created.id);
+
+      assert.notEqual(created.role, 'ADMIN');
+    });
+  });
+
   describe('POST /auth/google - Google Sign-In', () => {
+    test('rejects a client-supplied ADMIN role', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/auth/google',
+        payload: { idToken: 'anything', role: 'ADMIN' },
+      });
+
+      assert.equal(response.statusCode, 400);
+      assert.ok(response.json().error.includes('role'));
+    });
+
     test('returns 400 when idToken is missing', async () => {
       const response = await app.inject({
         method: 'POST',
