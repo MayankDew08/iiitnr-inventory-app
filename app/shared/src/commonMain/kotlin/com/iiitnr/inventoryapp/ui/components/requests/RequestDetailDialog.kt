@@ -50,7 +50,8 @@ import com.iiitnr.inventoryapp.ui.components.components.ComponentImage
 import com.iiitnr.inventoryapp.ui.theme.AppTheme
 import com.iiitnr.inventoryapp.ui.theme.inventoryColors
 import com.iiitnr.inventoryapp.utils.compactUserLabel
-import com.iiitnr.inventoryapp.utils.getRelativeDays
+import com.iiitnr.inventoryapp.utils.formatDisplayDate
+import com.iiitnr.inventoryapp.utils.isOverdue
 import kotlinx.datetime.LocalDate
 
 @Composable
@@ -310,14 +311,14 @@ private fun RequestDetailDatesFlow(
         DateItem(
             icon = Icons.Default.History,
             label = "Created",
-            value = getRelativeDays(request.createdAt, today),
+            value = formatDisplayDate(request.createdAt),
         )
 
         request.fulfilledAt?.let {
             DateItem(
                 icon = Icons.Default.CheckCircle,
                 label = "Fulfilled",
-                value = getRelativeDays(it, today),
+                value = formatDisplayDate(it),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
@@ -327,9 +328,9 @@ private fun RequestDetailDatesFlow(
                 DateItem(
                     icon = Icons.Default.Timer,
                     label = "Return Due",
-                    value = getRelativeDays(it, today),
+                    value = formatDisplayDate(it),
                     tint =
-                        if (getRelativeDays(it, today).contains("ago")) {
+                        if (isOverdue(it, today)) {
                             MaterialTheme.colorScheme.error
                         } else {
                             MaterialTheme.colorScheme.secondary
@@ -351,7 +352,7 @@ private fun RequestDetailDatesFlow(
             DateItem(
                 icon = Icons.AutoMirrored.Filled.AssignmentReturn,
                 label = "Returned",
-                value = getRelativeDays(it, today),
+                value = formatDisplayDate(it),
                 tint = MaterialTheme.colorScheme.primary,
             )
         }
@@ -360,7 +361,7 @@ private fun RequestDetailDatesFlow(
             DateItem(
                 icon = Icons.Default.Refresh,
                 label = "Last Renewed",
-                value = getRelativeDays(it, today),
+                value = formatDisplayDate(it),
                 tint = MaterialTheme.colorScheme.tertiary,
             )
             request.lastRenewReason?.takeIf { reason -> reason.isNotBlank() }?.let { reason ->

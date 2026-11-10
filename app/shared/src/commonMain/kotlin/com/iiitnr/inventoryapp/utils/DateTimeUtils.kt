@@ -51,6 +51,36 @@ fun getRelativeDays(
     }
 }
 
+fun formatDisplayDate(dateTimeString: String?): String {
+    if (dateTimeString == null) return ""
+    val date =
+        try {
+            LocalDateTime.parse(dateTimeString.replace(' ', 'T')).date
+        } catch (e: Exception) {
+            return ""
+        }
+    val month =
+        date.month.name
+            .lowercase()
+            .replaceFirstChar { it.uppercase() }
+            .take(3)
+    return "${date.dayOfMonth} $month ${date.year}"
+}
+
+fun isOverdue(
+    dateTimeString: String?,
+    today: LocalDate,
+): Boolean {
+    if (dateTimeString == null) return false
+    val date =
+        try {
+            LocalDateTime.parse(dateTimeString.replace(' ', 'T')).date
+        } catch (e: Exception) {
+            return false
+        }
+    return date < today
+}
+
 fun buildDatesLine(
     request: Request,
     today: LocalDate,
