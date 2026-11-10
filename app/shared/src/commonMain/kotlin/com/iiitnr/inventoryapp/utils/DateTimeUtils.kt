@@ -64,7 +64,7 @@ fun formatDisplayDate(dateTimeString: String?): String {
             .lowercase()
             .replaceFirstChar { it.uppercase() }
             .take(3)
-    return "${date.dayOfMonth} $month ${date.year}"
+    return "${date.day} $month ${date.year}"
 }
 
 fun isOverdue(
