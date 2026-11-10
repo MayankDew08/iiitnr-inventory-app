@@ -64,7 +64,7 @@ fun buildDatesLine(
         }
     }
     tokens += "Created: ${getRelativeDays(request.createdAt, today)}"
-    request.fulfilledAt?.let { tokens += "Fulfilled: ${getRelativeDays(it, today)}" }
+    request.fulfilledAt?.let { tokens += "Issued: ${getRelativeDays(it, today)}" }
     request.lastRenewDate?.let { tokens += "Renewed: ${getRelativeDays(it, today)}" }
     request.returnedAt?.let { tokens += "Returned: ${getRelativeDays(it, today)}" }
     if (request.lateFeeAccrued > 0) {

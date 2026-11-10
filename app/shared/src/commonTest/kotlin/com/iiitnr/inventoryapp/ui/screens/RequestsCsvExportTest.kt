@@ -73,7 +73,7 @@ class RequestsCsvExportTest {
         val csv = buildRequestsCsv(listOf(request(items = listOf(item))))
         val row = csv.lines()[1]
 
-        assertTrue(row.contains("Flame Sensor (Req:5, Ful:5, Ret:2, Wrn:3)"), "item summary wrong: $row")
+        assertTrue(row.contains("Flame Sensor (Req:5, Iss:5, Ret:2, Wrn:3)"), "item summary wrong: $row")
     }
 
     @Test
