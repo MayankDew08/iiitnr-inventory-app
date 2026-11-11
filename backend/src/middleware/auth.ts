@@ -22,6 +22,9 @@ export const requireAdminOrLA = async (request: FastifyRequest) => {
 export const isAdminOrLA = (role?: UserRoleValue): boolean =>
   role === UserRole.ADMIN || role === UserRole.LA;
 
+export const canExportCsv = (role?: UserRoleValue): boolean =>
+  role === UserRole.ADMIN || role === UserRole.LA || role === UserRole.FACULTY;
+
 export const requireAdmin = async (request: FastifyRequest) => {
   await request.jwtVerify();
   const userRole = (request.user as { role?: UserRoleValue })?.role;

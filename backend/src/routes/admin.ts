@@ -5,6 +5,7 @@ import { auditLog, user } from '../drizzle/schema.js';
 import { requireAdmin } from '../middleware/auth.js';
 import type { AuditActionTypeValue, UserRoleValue } from '../utils/enums.js';
 import { userRoleValues, AuditActionType } from '../utils/enums.js';
+import { logAudit } from '../utils/audit.js';
 import { sanitizeString } from '../utils/validation.js';
 
 interface AuditLogQueryParams {
@@ -41,15 +42,7 @@ const updateUserSchema = {
   },
 } as const;
 
-const VALID_ACTIONS = [
-  'CREATE',
-  'UPDATE',
-  'DELETE',
-  'LOGIN',
-  'LOGOUT',
-  'REQUEST_STATUS_CHANGE',
-  'INVENTORY_ADJUST',
-];
+const VALID_ACTIONS: readonly string[] = Object.values(AuditActionType);
 
 const userPublicColumns = {
   id: user.id,
@@ -256,37 +249,22 @@ async function handleUpdateUser(
       return reply.code(500).send({ error: 'failed to update user' });
     }
 
-    await logUserUpdateAudit(req, userId, existing, updated);
+    await logAudit(
+      {
+        userId: (req.user as { sub?: string })?.sub,
+        action: AuditActionType.UPDATE,
+        entityType: 'User',
+        entityId: userId,
+        oldValues: existing,
+        newValues: updated,
+      },
+      req,
+    );
 
     return reply.send({ user: updated });
   } catch (err) {
     app.log.error(err);
     return reply.code(500).send({ error: 'failed to update user' });
-  }
-}
-
-async function logUserUpdateAudit(
-  req: FastifyRequest,
-  targetUserId: string,
-  oldValues: Record<string, unknown>,
-  newValues: Record<string, unknown>,
-) {
-  try {
-    const actorId = (req.user as { sub?: string })?.sub;
-    await db.insert(auditLog).values({
-      id: crypto.randomUUID(),
-      userId: actorId,
-      action: AuditActionType.UPDATE,
-      entityType: 'User',
-      entityId: targetUserId,
-      oldValues: JSON.stringify(oldValues),
-      newValues: JSON.stringify(newValues),
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-      createdAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.error('Failed to write audit log for user update:', err);
   }
 }
 

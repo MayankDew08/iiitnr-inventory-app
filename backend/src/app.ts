@@ -16,9 +16,8 @@ import { startRequestExpirySweep } from './services/request-expiry.js';
 import { startRenewalReminderSweep } from './services/renewal-reminder.js';
 import { startRenewalChaseSweep } from './services/renewal-chase.js';
 import { startLateFeeSweep } from './services/late-fee.js';
-import { sendExpiryNoticesForRequests } from './services/expiry-notice.js';
 import { isMailEnabled } from './services/MailService.js';
-import { notifyRequestsExpired } from './services/NotificationService.js';
+import { fanOutExpiredRequests } from './services/expiry-fanout.js';
 import { notifyRequestsUpdated } from './utils/events.js';
 import { DomainError } from './utils/errors.js';
 
@@ -380,13 +379,7 @@ function setupHooks(app: FastifyInstance, env: AppEnvironment) {
           notifyRequestsUpdated();
         },
         (expired) => {
-          notifyRequestsExpired(expired)
-            .catch((err) => app.log.error({ err }, 'Failed to notify expired requests'))
-            .finally(() => notifyRequestsUpdated());
-
-          sendExpiryNoticesForRequests(expired.map((request) => request.id)).catch((err) =>
-            app.log.error({ err }, 'Failed to send expiry notices'),
-          );
+          fanOutExpiredRequests(expired, (err, message) => app.log.error({ err }, message));
         },
       );
       stopRenewalReminderSweep = startRenewalReminderSweep((err) =>

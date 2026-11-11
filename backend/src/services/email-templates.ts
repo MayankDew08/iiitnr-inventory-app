@@ -99,7 +99,7 @@ Your request "${ctx.projectTitle}" was due for return on ${ctx.returnDueAt ? for
 
 A late return charge of ₹${LATE_FEE_PER_DAY} per day applies from tomorrow, and it keeps growing until the items are returned. Please return them to the lab as soon as possible — the charge stops as soon as everything is back.
 
-If you still need the items, ask your faculty supervisor to approve a renewal.
+If you still need these components, ask your faculty supervisor to approve a renewal.
 
 Regards,
 ${signOff()}`;
@@ -147,6 +147,24 @@ Was due: ${ctx.returnDueAt ? formatIstDate(ctx.returnDueAt) : 'unknown'}
 Items written off: ${itemSummary(ctx.items)}
 
 The student and the supervisor have been notified. Please check the stock levels if these components are needed for upcoming labs.
+
+Regards,
+${signOff()}`;
+
+  return { subject, text };
+}
+
+export function renewalReminderEmail(ctx: EmailRequestContext): {
+  subject: string;
+  text: string;
+} {
+  const dueDate = ctx.returnDueAt ? formatIstDate(ctx.returnDueAt) : 'the due date';
+  const subject = `Reminder: Return due for "${ctx.projectTitle}" on ${dueDate}`;
+  const text = `Hi ${personName(ctx.studentName, ctx.studentEmail)},
+
+This is a reminder that your request "${ctx.projectTitle}" is due for return on ${dueDate}.
+
+Please return the items or request a renewal before the due date.
 
 Regards,
 ${signOff()}`;

@@ -15,8 +15,8 @@ export const RequestStatus = {
   RETURNED: 'RETURNED',
   PARTIALLY_RETURNED: 'PARTIALLY_RETURNED',
   EXPIRED: 'EXPIRED',
-  REQUESTED_RENEW: 'REQUESTED_RENEW',
   RENEWED: 'RENEWED',
+  REQUESTED_RENEW: 'REQUESTED_RENEW',
 } as const;
 
 export const ComponentCategory = {

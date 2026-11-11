@@ -5,7 +5,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../src/drizzle/db.js';
 import { request, requestEmail, component } from '../src/drizzle/schema.js';
 import { setMailSender } from '../src/services/email-service.js';
-import { istDaysBetween } from '../src/services/date-utils.js';
+import { IST_DAY_MS, istDayStart, istDaysBetween } from '../src/services/date-utils.js';
 import {
   computeLateFee,
   findLateFeeCandidates,
@@ -23,11 +23,14 @@ interface SentEmail {
 
 let sentEmails: SentEmail[] = [];
 
-function daysAgoIso(days: number, hour = 12): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  date.setHours(hour, 0, 0, 0);
-  return date.toISOString();
+function istNoonIso(offsetDays: number): string {
+  return new Date(
+    istDayStart(new Date()).getTime() + offsetDays * IST_DAY_MS + 12 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
+function daysAgoIso(days: number): string {
+  return istNoonIso(-days);
 }
 
 async function emailsFor(requestId: string) {

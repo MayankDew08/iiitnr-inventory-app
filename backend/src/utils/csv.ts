@@ -1,9 +1,12 @@
-/**
- * Minimal RFC 4180 compliant CSV parser.
- *
- * Supports quoted fields, escaped double quotes (""), commas and newlines
- * inside quotes, CRLF/LF line endings, and trailing newlines.
- */
+export function escapeCsvField(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];

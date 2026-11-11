@@ -1,8 +1,4 @@
-import { inArray } from 'drizzle-orm';
-import { db } from '../drizzle/db.js';
-import { user } from '../drizzle/schema.js';
-import { UserRole } from '../utils/enums.js';
-import { sendTrackedEmail } from './email-service.js';
+import { sendTrackedEmail, RequestEmailKind } from './email-service.js';
 import { isMailEnabled } from './MailService.js';
 import {
   buildEmailContext,
@@ -10,25 +6,21 @@ import {
   expiryNoticeForStaff,
   expiryNoticeForStudent,
 } from './email-templates.js';
-import { fetchAndShapeRequest } from './RequestService.js';
-
-export const EXPIRY_NOTICE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+import { fetchExactAndShapeRequest } from './RequestService.js';
+import { getStaffRecipients } from './NotificationService.js';
 
 export async function sendExpiryNotices(requestId: string): Promise<{
   sent: number;
   failed: number;
 }> {
-  const shaped = await fetchAndShapeRequest(requestId);
+  const shaped = await fetchExactAndShapeRequest(requestId);
   if (!shaped) return { sent: 0, failed: 1 };
 
   const ctx = buildEmailContext(shaped);
   let sent = 0;
   let failed = 0;
 
-  const staffRows = await db
-    .select({ id: user.id, email: user.email })
-    .from(user)
-    .where(inArray(user.role, [UserRole.ADMIN, UserRole.LA]));
+  const staffRows = await getStaffRecipients();
 
   const student = {
     requestId,
@@ -51,7 +43,7 @@ export async function sendExpiryNotices(requestId: string): Promise<{
     const ok = await sendTrackedEmail({
       requestId: recipient.requestId,
       recipientId: recipient.recipientId,
-      kind: 'EXPIRY_NOTICE',
+      kind: RequestEmailKind.EXPIRY_NOTICE,
       variant: recipient.variant,
       to: recipient.to,
       subject: recipient.template.subject,
@@ -67,7 +59,7 @@ export async function sendExpiryNotices(requestId: string): Promise<{
     const ok = await sendTrackedEmail({
       requestId,
       recipientId: staff.id,
-      kind: 'EXPIRY_NOTICE',
+      kind: RequestEmailKind.EXPIRY_NOTICE,
       variant: 'STAFF',
       to: staff.email,
       subject: staffTemplate.subject,

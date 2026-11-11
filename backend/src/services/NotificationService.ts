@@ -1,9 +1,9 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { notification, user } from '../drizzle/schema.js';
 import { RequestStatus, UserRole } from '../utils/enums.js';
 import { notifyNotificationCreated } from '../utils/events.js';
-import { fetchAndShapeRequest } from './RequestService.js';
+import { fetchExactAndShapeRequest } from './RequestService.js';
 import type { ExpiredRequest } from './request-expiry.js';
 
 export const NotificationType = {
@@ -76,12 +76,11 @@ function dueDateText(req: ShapedRequestForNotification): string {
   return req.returnDueAt ? req.returnDueAt.slice(0, 10) : 'the due date';
 }
 
-export async function getStaffRecipientIds(): Promise<string[]> {
-  const rows = await db
-    .select({ id: user.id })
+export async function getStaffRecipients(): Promise<{ id: string; email: string }[]> {
+  return db
+    .select({ id: user.id, email: user.email })
     .from(user)
     .where(inArray(user.role, [UserRole.ADMIN, UserRole.LA]));
-  return rows.map((row) => row.id);
 }
 
 export async function createNotification(input: {
@@ -119,6 +118,7 @@ export async function createNotification(input: {
       body: input.body ?? null,
       requestId: input.requestId ?? null,
       createdAt: createdAt.toISOString(),
+      read: false,
     },
   });
 }
@@ -284,9 +284,9 @@ async function applyNotificationPlan(
     recipients.push({ id: req.targetFacultyId, ...plan.faculty });
   }
   if (plan.staff) {
-    for (const staffId of await getStaffRecipientIds()) {
-      if (staffId !== actorUserId) {
-        recipients.push({ id: staffId, ...plan.staff });
+    for (const staff of await getStaffRecipients()) {
+      if (staff.id !== actorUserId) {
+        recipients.push({ id: staff.id, ...plan.staff });
       }
     }
   }
@@ -311,10 +311,29 @@ export async function notifyRequestTransition(
 
 export async function notifyRequestsExpired(expired: ExpiredRequest[]): Promise<void> {
   for (const { id } of expired) {
-    const shaped = await fetchAndShapeRequest(id);
+    const shaped = await fetchExactAndShapeRequest(id);
     if (shaped) {
       await notifyRequestTransition(shaped);
     }
+  }
+}
+
+export async function notifyRenewalRejected(
+  req: ShapedRequestForNotification,
+  actorUserId?: string,
+): Promise<void> {
+  try {
+    if (req.userId === actorUserId) return;
+
+    await createNotification({
+      recipientId: req.userId,
+      type: NotificationType.RENEWAL_REJECTED,
+      title: 'Renewal request rejected',
+      body: `Your renewal request for "${req.projectTitle}" was not approved. The request keeps its original return due date (${dueDateText(req)}).`,
+      requestId: req.id,
+    });
+  } catch (err) {
+    console.error('Failed to send renewal rejection notification:', err);
   }
 }
 
@@ -328,11 +347,11 @@ export async function listNotifications(recipientId: string, limit = 50) {
 }
 
 export async function countUnreadNotifications(recipientId: string): Promise<number> {
-  const rows = await db
-    .select({ id: notification.id })
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
     .from(notification)
     .where(and(eq(notification.recipientId, recipientId), eq(notification.read, false)));
-  return rows.length;
+  return row?.count ?? 0;
 }
 
 export async function markNotificationRead(

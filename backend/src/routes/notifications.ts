@@ -1,5 +1,9 @@
 import type { FastifyPluginCallback, FastifyRequest, FastifyReply } from 'fastify';
+import type { EventMessage } from 'fastify-sse-v2';
+import { pushable } from 'it-pushable';
 import { requireAuth } from '../middleware/auth.js';
+import { events, EventType } from '../utils/events.js';
+import type { NotificationCreatedEvent } from '../utils/events.js';
 import {
   listNotifications,
   countUnreadNotifications,
@@ -70,6 +74,29 @@ async function handleMarkAllRead(req: FastifyRequest, reply: FastifyReply) {
   return reply.send({ ok: true, count });
 }
 
+function handleNotificationStream(req: FastifyRequest, reply: FastifyReply) {
+  const currentUserId = getCurrentUserId(req);
+  if (!currentUserId) {
+    return reply.code(401).send({ error: 'unauthorized' });
+  }
+
+  const p = pushable<EventMessage>({ objectMode: true });
+  const onNotification = (event: NotificationCreatedEvent) => {
+    if (event.recipientId === currentUserId) {
+      p.push({ data: JSON.stringify(event.notification) });
+    }
+  };
+
+  events.on(EventType.NOTIFICATION_CREATED, onNotification);
+
+  req.raw.on('close', () => {
+    events.off(EventType.NOTIFICATION_CREATED, onNotification);
+    p.end();
+  });
+
+  return reply.sse(p);
+}
+
 const notificationsRoutes: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/notifications', { preHandler: requireAuth }, (req, reply) =>
     handleListNotifications(req, reply),
@@ -85,6 +112,10 @@ const notificationsRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
   app.put('/notifications/read-all', { preHandler: requireAuth }, (req, reply) =>
     handleMarkAllRead(req, reply),
+  );
+
+  app.get('/notifications/events', { preHandler: requireAuth }, (req, reply) =>
+    handleNotificationStream(req, reply),
   );
 
   done();

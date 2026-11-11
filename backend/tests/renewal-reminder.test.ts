@@ -10,6 +10,8 @@ import {
   findRenewalReminderCandidates,
 } from '../src/services/renewal-reminder.js';
 import { setMailSender } from '../src/services/email-service.js';
+import { IST_DAY_MS, istDayStart } from '../src/services/date-utils.js';
+import { approveRenewRequestTransaction } from '../src/services/RequestService.js';
 import { createComponent, createRequest, createUser, deleteAllRequests } from './helpers.js';
 
 interface SentEmail {
@@ -20,18 +22,18 @@ interface SentEmail {
 
 let sentEmails: SentEmail[] = [];
 
+function istNoonIso(offsetDays: number): string {
+  return new Date(
+    istDayStart(new Date()).getTime() + offsetDays * IST_DAY_MS + 12 * 60 * 60 * 1000,
+  ).toISOString();
+}
+
 function daysAgoIso(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  date.setHours(12, 0, 0, 0);
-  return date.toISOString();
+  return istNoonIso(-days);
 }
 
 function daysAheadIso(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(12, 0, 0, 0);
-  return date.toISOString();
+  return istNoonIso(days);
 }
 
 async function emailsFor(requestId: string) {
@@ -323,6 +325,33 @@ describe('renewal reminder sweep', () => {
     expect(second.sent).toBe(1);
     expect(second.failed).toBe(0);
     expect(await emailsFor(req.id)).toHaveLength(1);
+  });
+
+  test('re-arms after a renewal moves the due date', async () => {
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Renewed reminder',
+      status: 'ISSUED',
+      items: [{ componentId, quantity: 1, fulfilledQuantity: 1 }],
+    });
+
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAheadIso(3) })
+      .where(eq(request.id, req.id));
+
+    expect((await runRenewalReminderSweep()).sent).toBe(1);
+
+    await approveRenewRequestTransaction({ id: req.id });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAheadIso(4) })
+      .where(eq(request.id, req.id));
+
+    const second = await runRenewalReminderSweep();
+    expect(second.sent).toBe(1);
+    expect(sentEmails).toHaveLength(2);
   });
 
   test('processes multiple candidates in one sweep', async () => {

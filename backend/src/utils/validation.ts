@@ -1,7 +1,16 @@
 import type { FastifyRequest } from 'fastify';
 import { filterXSS } from 'xss';
 
-export function isValidHttpUrl(urlString: string): boolean {
+export interface ValidationError {
+  code: number;
+  message: string;
+}
+
+export function isValidationError(value: unknown): value is ValidationError {
+  return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
+}
+
+export function isAcceptableImageUrl(urlString: string): boolean {
   if (urlString.startsWith('/api/uploads/')) return true;
   try {
     const url = new URL(urlString);

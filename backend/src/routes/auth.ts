@@ -7,7 +7,8 @@ import { user } from '../drizzle/schema.js';
 import { UserRole, AuditActionType } from '../utils/enums.js';
 import type { UserRoleValue } from '../utils/enums.js';
 import { logAudit } from '../utils/audit.js';
-import { sanitizeString } from '../utils/validation.js';
+import { isValidationError, sanitizeString } from '../utils/validation.js';
+import type { ValidationError } from '../utils/validation.js';
 import { deriveIiitnrProfileFromEmail, pickDerivedProfileUpdates } from '../utils/iiitnr-email.js';
 
 interface RegisterBody {
@@ -45,11 +46,6 @@ const userPublicColumns = {
   batch: true,
   branch: true,
 } as const;
-
-interface ValidationError {
-  code: number;
-  message: string;
-}
 
 interface GoogleClientIds {
   primary: string;
@@ -252,10 +248,6 @@ function validateEmailVerification(emailVerified?: boolean): ValidationError | n
   }
 
   return null;
-}
-
-function isValidationError(value: unknown): value is ValidationError {
-  return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }
 
 async function verifyGoogleToken(

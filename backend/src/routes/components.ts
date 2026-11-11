@@ -3,18 +3,13 @@ import { eq, sql } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { component, requestItem } from '../drizzle/schema.js';
 import type { InferSelectModel } from 'drizzle-orm';
-import { requireAuth, requireAdminOrLA } from '../middleware/auth.js';
-import {
-  UserRole,
-  categoryValues,
-  locationValues,
-  toLocationEnum,
-  AuditActionType,
-} from '../utils/enums.js';
+import { canExportCsv, requireAuth, requireAdminOrLA } from '../middleware/auth.js';
+import { categoryValues, locationValues, toLocationEnum, AuditActionType } from '../utils/enums.js';
 import type { CategoryValue, LocationValue, UserRoleValue } from '../utils/enums.js';
 import { logAudit, getUserIdFromRequest } from '../utils/audit.js';
-import { isValidHttpUrl, sanitizeString } from '../utils/validation.js';
-import { parseCsv } from '../utils/csv.js';
+import { isAcceptableImageUrl, sanitizeString } from '../utils/validation.js';
+import type { ValidationError } from '../utils/validation.js';
+import { escapeCsvField, parseCsv } from '../utils/csv.js';
 
 interface ComponentBody {
   name?: string;
@@ -34,11 +29,6 @@ interface NormalizedComponentInput {
   availableQuantity?: number;
   category?: string;
   location?: string;
-}
-
-interface ValidationError {
-  code: number;
-  message: string;
 }
 
 type ComponentRecord = InferSelectModel<typeof component>;
@@ -105,7 +95,7 @@ function validateLocation(location: string | undefined): ValidationError | null 
 }
 
 function validateImageUrl(imageUrl: string | undefined): ValidationError | null {
-  if (imageUrl && !isValidHttpUrl(imageUrl)) {
+  if (imageUrl && !isAcceptableImageUrl(imageUrl)) {
     return { code: 400, message: 'imageUrl must be a valid HTTP or HTTPS URL' };
   }
   return null;
@@ -271,22 +261,16 @@ function shouldReturn304(modifiedSinceHeader: string | undefined, latestDateStr:
   return clientSec >= serverSec;
 }
 
-function escapeCsvValue(value: string | null | undefined): string {
-  if (value == null) return '';
-  const str = value.replace(/"/g, '""');
-  return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
-}
-
 function componentToCsvRow(c: ComponentRecord): string {
   return [
-    escapeCsvValue(c.id),
-    escapeCsvValue(c.name),
-    escapeCsvValue(c.description),
-    escapeCsvValue(c.category?.replace(/_/g, ' ') ?? null),
-    escapeCsvValue(c.location?.replace(/_/g, ' ') ?? null),
-    escapeCsvValue(c.imageUrl),
-    escapeCsvValue(c.createdAt),
-    escapeCsvValue(c.updatedAt),
+    escapeCsvField(c.id),
+    escapeCsvField(c.name),
+    escapeCsvField(c.description),
+    escapeCsvField(c.category?.replace(/_/g, ' ') ?? null),
+    escapeCsvField(c.location?.replace(/_/g, ' ') ?? null),
+    escapeCsvField(c.imageUrl),
+    escapeCsvField(c.createdAt),
+    escapeCsvField(c.updatedAt),
     c.totalQuantity,
     c.availableQuantity,
   ].join(',');
@@ -330,10 +314,6 @@ function buildUpdateData(
   }
 
   return { data, nextAvailable, nextTotal };
-}
-
-function canExportCsv(role: UserRoleValue | undefined): boolean {
-  return role === UserRole.ADMIN || role === UserRole.LA || role === UserRole.FACULTY;
 }
 
 const MAX_IMPORT_ROWS = 1000;

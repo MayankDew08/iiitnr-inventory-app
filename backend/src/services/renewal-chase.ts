@@ -3,12 +3,11 @@ import { db } from '../drizzle/db.js';
 import { request, requestEmail, user } from '../drizzle/schema.js';
 import { RequestStatus } from '../utils/enums.js';
 import { istDaysBetween } from './date-utils.js';
-import { sendTrackedEmail } from './email-service.js';
+import { RequestEmailKind, sendTrackedEmail } from './email-service.js';
 import { isMailEnabled } from './MailService.js';
 import { buildEmailContext, renewalChaseEmail, RENEWAL_CHASE_LADDER } from './email-templates.js';
-import { fetchAndShapeRequest } from './RequestService.js';
-
-export const RENEWAL_CHASE_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+import { fetchExactAndShapeRequest } from './RequestService.js';
+import { HOURLY_SWEEP_INTERVAL_MS, startIntervalSweep } from '../utils/sweep.js';
 
 export interface RenewalChaseCandidate {
   requestId: string;
@@ -46,7 +45,7 @@ export async function findRenewalChaseCandidates(
     .from(requestEmail)
     .where(
       and(
-        eq(requestEmail.kind, 'RENEWAL_CHASE'),
+        eq(requestEmail.kind, RequestEmailKind.RENEWAL_CHASE),
         inArray(
           requestEmail.requestId,
           rows.map((row) => row.requestId),
@@ -85,7 +84,7 @@ export async function sendRenewalChaseEmails(
   let failed = 0;
 
   for (const candidate of candidates) {
-    const shaped = await fetchAndShapeRequest(candidate.requestId);
+    const shaped = await fetchExactAndShapeRequest(candidate.requestId);
     if (!shaped) {
       failed++;
       continue;
@@ -97,7 +96,7 @@ export async function sendRenewalChaseEmails(
     const ok = await sendTrackedEmail({
       requestId: candidate.requestId,
       recipientId: candidate.recipientId,
-      kind: 'RENEWAL_CHASE',
+      kind: RequestEmailKind.RENEWAL_CHASE,
       variant: candidate.variant,
       to: candidate.recipientEmail,
       subject,
@@ -126,21 +125,16 @@ export async function runRenewalChaseSweep(
 
 export function startRenewalChaseSweep(
   onError: (err: unknown) => void,
-  intervalMs = RENEWAL_CHASE_INTERVAL_MS,
+  intervalMs: number = HOURLY_SWEEP_INTERVAL_MS,
 ) {
-  const runSweep = () => {
-    runRenewalChaseSweep()
-      .then((result) => {
-        if (result.sent > 0) {
-          console.log('Renewal chase sweep', result);
-        }
-      })
-      .catch(onError);
-  };
-
-  runSweep();
-  const interval = setInterval(runSweep, intervalMs);
-  interval.unref?.();
-
-  return () => clearInterval(interval);
+  return startIntervalSweep(
+    async () => {
+      const result = await runRenewalChaseSweep();
+      if (result.sent > 0) {
+        console.log('Renewal chase sweep', result);
+      }
+    },
+    onError,
+    intervalMs,
+  );
 }

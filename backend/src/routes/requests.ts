@@ -1,14 +1,16 @@
 import type { FastifyPluginCallback, FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { requireAuth, isAdminOrLA } from '../middleware/auth.js';
+import { canExportCsv, requireAuth, isAdminOrLA } from '../middleware/auth.js';
 import { RequestStatus, requestStatusValues, UserRole, AuditActionType } from '../utils/enums.js';
 import type { RequestStatusValue, UserRoleValue } from '../utils/enums.js';
 import { logAudit, getUserIdFromRequest } from '../utils/audit.js';
-import { sanitizeString } from '../utils/validation.js';
+import { isValidationError, sanitizeString } from '../utils/validation.js';
+import type { ValidationError } from '../utils/validation.js';
+import { escapeCsvField } from '../utils/csv.js';
 import { expireOverdueRequests } from '../services/request-expiry.js';
-import { notifyRequestTransition } from '../services/NotificationService.js';
+import { fanOutExpiredRequests } from '../services/expiry-fanout.js';
+import { notifyRenewalRejected, notifyRequestTransition } from '../services/NotificationService.js';
 import { events, EventType, notifyRequestsUpdated } from '../utils/events.js';
 import type { EventMessage } from 'fastify-sse-v2';
-import type { NotificationCreatedEvent } from '../utils/events.js';
 import { pushable } from 'it-pushable';
 import * as RequestService from '../services/RequestService.js';
 import type {
@@ -110,11 +112,6 @@ function getCurrentUser(req: FastifyRequest): CurrentUser {
   return req.user as CurrentUser;
 }
 
-interface ValidationError {
-  code: number;
-  message: string;
-}
-
 function validateCreateRequestBody(body: CreateRequestBody): ValidationError | null {
   const items = body?.items ?? [];
   const targetFacultyId = body?.targetFacultyId?.trim();
@@ -167,10 +164,6 @@ function validateStatusInput(status: string | undefined): ValidationError | null
   }
 
   return null;
-}
-
-function isValidationError(value: unknown): value is ValidationError {
-  return typeof value === 'object' && value !== null && 'code' in value && 'message' in value;
 }
 
 function toNotificationShapedRequest(
@@ -303,7 +296,7 @@ async function handleCreateRequest(
     normalizedItems,
   );
 
-  const createdRequest = await RequestService.fetchAndShapeRequest(requestId);
+  const createdRequest = await RequestService.fetchExactAndShapeRequest(requestId);
   if (!createdRequest) {
     throw new Error('failed to create request');
   }
@@ -356,12 +349,7 @@ async function handleGetRequests(
 
   if (status === RequestStatus.EXPIRED) {
     const expired = await expireOverdueRequests();
-    for (const { id } of expired) {
-      const shaped = await RequestService.fetchAndShapeRequest(id);
-      if (shaped) {
-        await notifyTransitionSafely(app, shaped);
-      }
-    }
+    fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
   }
 
   const isAdmin = isAdminOrLA(currentUser.role);
@@ -371,7 +359,6 @@ async function handleGetRequests(
     userId: isAdmin ? requestedUserId : currentUserId,
     targetFacultyId: isFaculty ? currentUserId : undefined,
     status: status as RequestStatusValue,
-    isAdmin,
   });
 
   reply.send({ requests });
@@ -440,7 +427,7 @@ async function handlePendingStatusUpdate(
   }
 
   await RequestService.updateRequestStatus(existingRequest.id, newStatus);
-  const updatedRequest = await RequestService.fetchAndShapeRequest(existingRequest.id);
+  const updatedRequest = await RequestService.fetchExactAndShapeRequest(existingRequest.id);
 
   await logAudit(
     {
@@ -487,7 +474,7 @@ async function handleApprovedStatusUpdate(
   const issueItems = body.issueItems;
 
   await RequestService.issueRequestTransaction(existingRequest, issueItems);
-  const updatedRequest = await RequestService.fetchAndShapeRequest(existingRequest.id);
+  const updatedRequest = await RequestService.fetchExactAndShapeRequest(existingRequest.id);
   await logAudit(
     {
       userId: getUserIdFromRequest(req),
@@ -551,7 +538,7 @@ async function handleRequestedRenewalStatusUpdate(
   } else {
     await RequestService.rejectRenewRequestTransaction(existingRequest, revertStatus);
   }
-  const updatedRequest = await RequestService.fetchAndShapeRequest(existingRequest.id);
+  const updatedRequest = await RequestService.fetchExactAndShapeRequest(existingRequest.id);
 
   await logAudit(
     {
@@ -565,13 +552,14 @@ async function handleRequestedRenewalStatusUpdate(
     req,
   );
 
-  if (updatedRequest) {
-    const renewalDecision = isApproval ? RequestStatus.RENEWED : revertStatus;
+  if (updatedRequest && isApproval) {
     await notifyTransitionSafely(
       { log: { error: (err: unknown) => req.log.error(err) } },
-      { ...updatedRequest, status: renewalDecision },
+      updatedRequest,
       currentUser.sub,
     );
+  } else if (updatedRequest) {
+    await notifyRenewalRejected(updatedRequest, currentUser.sub);
   }
 
   reply.send({ request: updatedRequest });
@@ -591,8 +579,7 @@ async function handleIssuedStatusUpdate(
     newStatus !== RequestStatus.PARTIALLY_RETURNED
   ) {
     reply.code(400).send({
-      error:
-        'issued request can only be set to RETURNED, PARTIALLY_RETURNED, RENEWED, or REQUESTED_RENEW',
+      error: 'issued request can only be set to RETURNED, PARTIALLY_RETURNED, or REQUESTED_RENEW',
     });
     return;
   }
@@ -613,7 +600,7 @@ async function handleIssuedStatusUpdate(
     }
     await RequestService.requestForRenewalTransaction(existingRequest, lastRenewReason);
   }
-  const updatedRequest = await RequestService.fetchAndShapeRequest(existingRequest.id);
+  const updatedRequest = await RequestService.fetchExactAndShapeRequest(existingRequest.id);
 
   await logAudit(
     {
@@ -667,7 +654,7 @@ async function handleExpiredStatusUpdate(
   await RequestService.returnRequestTransaction(existingRequest, body.returnItems, {
     preserveStatus: true,
   });
-  const updatedRequest = await RequestService.fetchAndShapeRequest(existingRequest.id);
+  const updatedRequest = await RequestService.fetchExactAndShapeRequest(existingRequest.id);
 
   await logAudit(
     {
@@ -748,7 +735,8 @@ async function handleUpdateRequestStatus(
     return;
   }
 
-  await expireOverdueRequests({ requestId: id });
+  const expired = await expireOverdueRequests({ requestId: id });
+  fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
 
   const existingRequest = await RequestService.fetchRequestWithItems(id);
 
@@ -846,7 +834,8 @@ async function handleDeleteRequest(
     return;
   }
 
-  await expireOverdueRequests({ requestId: id });
+  const expired = await expireOverdueRequests({ requestId: id });
+  fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
 
   const existingRequest = await RequestService.fetchRequestWithItems(id);
 
@@ -875,19 +864,6 @@ async function handleDeleteRequest(
   );
 
   reply.code(204).send();
-}
-
-function canExportCsv(role: UserRoleValue | undefined): boolean {
-  return role === UserRole.ADMIN || role === UserRole.LA || role === UserRole.FACULTY;
-}
-
-function escapeCsvField(field: unknown): string {
-  if (field === null || field === undefined) return '';
-  const str = String(field);
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }
 
 function generateRequestsCsv(
@@ -960,7 +936,6 @@ async function handleExportRequestsCsv(
     const requests = await RequestService.getRequests({
       userId: isAdmin ? undefined : currentUserId,
       targetFacultyId: isFaculty ? currentUserId : undefined,
-      isAdmin,
     });
 
     const csv = generateRequestsCsv(requests);
@@ -1033,30 +1008,6 @@ const requestsRoutes: FastifyPluginCallback = (app, _opts, done) => {
 
     req.raw.on('close', () => {
       events.off(EventType.REQUESTS_UPDATED, onUpdate);
-      p.end();
-    });
-
-    reply.sse(p);
-  });
-
-  app.get('/notifications/events', { preHandler: requireAuth }, (req, reply) => {
-    const currentUserId = getCurrentUser(req)?.sub;
-    if (!currentUserId) {
-      reply.code(401).send({ error: 'unauthorized' });
-      return;
-    }
-
-    const p = pushable<EventMessage>({ objectMode: true });
-    const onNotification = (event: NotificationCreatedEvent) => {
-      if (event.recipientId === currentUserId) {
-        p.push({ data: JSON.stringify(event.notification) });
-      }
-    };
-
-    events.on(EventType.NOTIFICATION_CREATED, onNotification);
-
-    req.raw.on('close', () => {
-      events.off(EventType.NOTIFICATION_CREATED, onNotification);
       p.end();
     });
 

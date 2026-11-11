@@ -4,11 +4,9 @@ import { component, request, requestItem } from '../drizzle/schema.js';
 import { logAudit } from '../utils/audit.js';
 import { AuditActionType, RequestStatus } from '../utils/enums.js';
 import type { RequestStatusValue } from '../utils/enums.js';
+import { HOURLY_SWEEP_INTERVAL_MS, startIntervalSweep } from '../utils/sweep.js';
 
-export const REQUEST_RETURN_LIMIT_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-export const REQUEST_EXPIRY_SWEEP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-
-const expirableStatuses: RequestStatusValue[] = [
+export const ACTIVE_LOAN_STATUSES: RequestStatusValue[] = [
   RequestStatus.ISSUED,
   RequestStatus.PARTIALLY_ISSUED,
   RequestStatus.PARTIALLY_RETURNED,
@@ -44,7 +42,7 @@ async function expireSingleRequest(requestId: string, nowIso: string): Promise<b
       .for('update');
 
     if (!lockedRequest) return false;
-    if (!expirableStatuses.includes(lockedRequest.status)) return false;
+    if (!ACTIVE_LOAN_STATUSES.includes(lockedRequest.status)) return false;
     if (!lockedRequest.returnDueAt || lockedRequest.returnDueAt > nowIso) return false;
 
     const items = await tx
@@ -127,7 +125,7 @@ export async function expireOverdueRequests(
 ): Promise<ExpiredRequest[]> {
   const nowIso = (options.now ?? new Date()).toISOString();
   const conditions = [
-    inArray(request.status, expirableStatuses),
+    inArray(request.status, ACTIVE_LOAN_STATUSES),
     isNotNull(request.returnDueAt),
     lte(request.returnDueAt, nowIso),
   ];
@@ -154,21 +152,16 @@ export async function expireOverdueRequests(
 export function startRequestExpirySweep(
   onError: (err: unknown) => void,
   onExpired?: (expired: ExpiredRequest[]) => void,
-  intervalMs = REQUEST_EXPIRY_SWEEP_INTERVAL_MS,
+  intervalMs: number = HOURLY_SWEEP_INTERVAL_MS,
 ) {
-  const runSweep = () => {
-    expireOverdueRequests()
-      .then((expired) => {
-        if (expired.length > 0) {
-          onExpired?.(expired);
-        }
-      })
-      .catch(onError);
-  };
-
-  runSweep();
-  const interval = setInterval(runSweep, intervalMs);
-  interval.unref?.();
-
-  return () => clearInterval(interval);
+  return startIntervalSweep(
+    async () => {
+      const expired = await expireOverdueRequests();
+      if (expired.length > 0) {
+        onExpired?.(expired);
+      }
+    },
+    onError,
+    intervalMs,
+  );
 }

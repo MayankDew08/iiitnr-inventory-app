@@ -210,6 +210,52 @@ describe('renewal notifications', () => {
     const studentInbox = await listNotifications(studentToken);
     assert.equal(studentInbox.notifications[0]?.type, 'RENEWAL_APPROVED');
   });
+
+  test('rejecting a renewal notifies the student that it was rejected', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/requests',
+      ...auth(studentToken),
+      payload: {
+        targetFacultyId: facultyId,
+        projectTitle: 'Rejected Renewal Project',
+        items: [{ componentId, quantity: 1 }],
+      },
+    });
+    const requestId = (created.json() as { request: { id: string } }).request.id;
+
+    await app.inject({
+      method: 'PUT',
+      url: `/requests/${requestId}`,
+      ...auth(facultyToken),
+      payload: { status: 'APPROVED' },
+    });
+    await app.inject({
+      method: 'PUT',
+      url: `/requests/${requestId}`,
+      ...auth(app.jwt.sign({ sub: adminUserId, role: UserRole.ADMIN }, { expiresIn: '1h' })),
+      payload: { status: 'ISSUED' },
+    });
+    await app.inject({
+      method: 'PUT',
+      url: `/requests/${requestId}`,
+      ...auth(studentToken),
+      payload: { status: 'REQUESTED_RENEW', lastRenewReason: 'Testing rejections' },
+    });
+
+    const rejected = await app.inject({
+      method: 'PUT',
+      url: `/requests/${requestId}`,
+      ...auth(facultyToken),
+      payload: { status: 'ISSUED' },
+    });
+    assert.equal(rejected.statusCode, 200);
+
+    const studentInbox = await listNotifications(studentToken);
+    const rejection = studentInbox.notifications.find((n) => n.type === 'RENEWAL_REJECTED');
+    assert.ok(rejection);
+    assert.equal(rejection?.requestId, requestId);
+  });
 });
 
 describe('notification read state', () => {

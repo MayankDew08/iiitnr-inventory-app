@@ -1,20 +1,15 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { request, user } from '../drizzle/schema.js';
-import { RequestStatus } from '../utils/enums.js';
-import type { RequestStatusValue } from '../utils/enums.js';
+import { ACTIVE_LOAN_STATUSES } from './request-expiry.js';
 import { isMailEnabled } from './MailService.js';
-import { sendTrackedEmail } from './email-service.js';
+import { hasSentEmail, RequestEmailKind, sendTrackedEmail } from './email-service.js';
+import { buildEmailContext, renewalReminderEmail } from './email-templates.js';
+import { IST_DAY_MS, istDayStart } from './date-utils.js';
+import { fetchExactAndShapeRequest } from './RequestService.js';
+import { HOURLY_SWEEP_INTERVAL_MS, startIntervalSweep } from '../utils/sweep.js';
 
 const RENEWAL_REMINDER_DAYS = 7;
-const RENEWABLE_STATUSES: RequestStatusValue[] = [
-  RequestStatus.ISSUED,
-  RequestStatus.PARTIALLY_ISSUED,
-  RequestStatus.PARTIALLY_RETURNED,
-  RequestStatus.RENEWED,
-];
-
-const RENEWAL_REMINDER_KIND = 'RENEWAL_REMINDER';
 const RENEWAL_REMINDER_VARIANT = 'D7';
 
 export interface RenewalReminderCandidate {
@@ -28,10 +23,7 @@ export interface RenewalReminderCandidate {
 export async function findRenewalReminderCandidates(
   now: Date = new Date(),
 ): Promise<RenewalReminderCandidate[]> {
-  const istNow = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const windowEnd = new Date(istNow);
-  windowEnd.setDate(windowEnd.getDate() + RENEWAL_REMINDER_DAYS);
-  windowEnd.setHours(23, 59, 59, 999);
+  const windowEnd = new Date(istDayStart(now).getTime() + (RENEWAL_REMINDER_DAYS + 1) * IST_DAY_MS);
 
   const rows = await db
     .select({
@@ -46,25 +38,18 @@ export async function findRenewalReminderCandidates(
     .where(
       and(
         isNotNull(request.returnDueAt),
-        inArray(request.status, RENEWABLE_STATUSES),
+        inArray(request.status, ACTIVE_LOAN_STATUSES),
         isNull(request.renewalReminderSentAt),
-        gte(request.returnDueAt, istNow.toISOString()),
-        lte(request.returnDueAt, windowEnd.toISOString()),
+        gte(request.returnDueAt, now.toISOString()),
+        lt(request.returnDueAt, windowEnd.toISOString()),
       ),
     );
 
-  return rows as RenewalReminderCandidate[];
+  return rows.filter((row): row is RenewalReminderCandidate => row.returnDueAt !== null);
 }
 
-function formatISTDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', {
-    timeZone: 'Asia/Kolkata',
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+function reminderVariant(returnDueAt: string): string {
+  return `${RENEWAL_REMINDER_VARIANT}:${returnDueAt.slice(0, 10)}`;
 }
 
 export async function sendRenewalReminders(
@@ -74,20 +59,30 @@ export async function sendRenewalReminders(
   let failed = 0;
 
   for (const c of candidates) {
-    const dueText = formatISTDate(c.returnDueAt);
-    const subject = `Reminder: Return due for "${c.projectTitle}" on ${dueText}`;
-    const text = `Hi,\n\nThis is a reminder that your request "${c.projectTitle}" is due for return on ${dueText}.\n\nPlease return the items or request a renewal before the due date.\n\n— IIITNR Inventory System`;
+    const shaped = await fetchExactAndShapeRequest(c.requestId);
+    if (!shaped) {
+      failed++;
+      continue;
+    }
+
+    const { subject, text } = renewalReminderEmail(buildEmailContext(shaped));
+    const variant = reminderVariant(c.returnDueAt);
 
     const ok = await sendTrackedEmail({
       requestId: c.requestId,
       recipientId: c.userId,
-      kind: RENEWAL_REMINDER_KIND,
-      variant: RENEWAL_REMINDER_VARIANT,
+      kind: RequestEmailKind.RENEWAL_REMINDER,
+      variant,
       to: c.userEmail,
       subject,
       text,
     });
-    if (ok) {
+
+    const alreadySent =
+      !ok &&
+      (await hasSentEmail(c.requestId, c.userId, RequestEmailKind.RENEWAL_REMINDER, variant));
+
+    if (ok || alreadySent) {
       sent++;
       await markReminderSent(c.requestId);
     } else {
@@ -123,24 +118,16 @@ export async function runRenewalReminderSweep(): Promise<{
 
 export function startRenewalReminderSweep(
   onError: (err: unknown) => void,
-  intervalMs = 60 * 60 * 1000,
+  intervalMs: number = HOURLY_SWEEP_INTERVAL_MS,
 ) {
-  const runSweep = async () => {
-    try {
+  return startIntervalSweep(
+    async () => {
       const result = await runRenewalReminderSweep();
       if (result.candidates > 0) {
         console.log('Renewal reminder sweep', result);
       }
-    } catch (err) {
-      onError(err);
-    }
-  };
-
-  runSweep().catch((err) => onError(err));
-  const interval = setInterval(() => {
-    runSweep().catch((err) => onError(err));
-  }, intervalMs);
-  interval.unref?.();
-
-  return () => clearInterval(interval);
+    },
+    onError,
+    intervalMs,
+  );
 }

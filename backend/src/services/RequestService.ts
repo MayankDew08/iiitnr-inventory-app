@@ -4,12 +4,13 @@ import { component, request, requestItem, user } from '../drizzle/schema.js';
 import { RequestStatus, UserRole } from '../utils/enums.js';
 import type { RequestStatusValue } from '../utils/enums.js';
 import { notifyRequestsUpdated } from '../utils/events.js';
-import { REQUEST_RETURN_LIMIT_MS } from './request-expiry.js';
 import {
   ExcessReturnQuantityError,
   InsufficientQuantityError,
   NotFoundError,
 } from '../utils/errors.js';
+
+export const REQUEST_RETURN_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface RequestItemInput {
   componentId: string;
@@ -124,8 +125,13 @@ export function shapeRequest(row: NonNullable<FullRequest>) {
   };
 }
 
-export async function fetchAndShapeRequest(id: string) {
-  const row = await fetchFullRequestByOtpOrId(id);
+export async function fetchExactAndShapeRequest(id: string) {
+  const row = await fetchFullRequest(id);
+  return row ? shapeRequest(row) : null;
+}
+
+export async function fetchAndShapeRequest(query: string) {
+  const row = await fetchFullRequestByOtpOrId(query);
   return row ? shapeRequest(row) : null;
 }
 
@@ -335,6 +341,8 @@ export async function approveRenewRequestTransaction(existingRequest: { id: stri
         updatedAt: renewedAt,
         returnDueAt: newReturnDueAt,
         lastRenewDate: renewedAt,
+        renewalRequestedAt: null,
+        renewalReminderSentAt: null,
       })
       .where(eq(request.id, existingRequest.id));
     notifyRequestsUpdated();
@@ -541,7 +549,6 @@ export async function getRequests(options: {
   userId?: string;
   targetFacultyId?: string;
   status?: RequestStatusValue;
-  isAdmin?: boolean;
 }) {
   const conditions = [];
 

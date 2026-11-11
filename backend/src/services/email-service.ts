@@ -3,8 +3,14 @@ import { db } from '../drizzle/db.js';
 import { requestEmail } from '../drizzle/schema.js';
 import { sendMail } from './MailService.js';
 
-export type RequestEmailKindValue =
-  'RENEWAL_CHASE' | 'EXPIRY_NOTICE' | 'LATE_FEE' | 'RENEWAL_REMINDER';
+export const RequestEmailKind = {
+  RENEWAL_CHASE: 'RENEWAL_CHASE',
+  EXPIRY_NOTICE: 'EXPIRY_NOTICE',
+  LATE_FEE: 'LATE_FEE',
+  RENEWAL_REMINDER: 'RENEWAL_REMINDER',
+} as const;
+
+export type RequestEmailKindValue = (typeof RequestEmailKind)[keyof typeof RequestEmailKind];
 
 type MailSender = (to: string, subject: string, text: string) => Promise<boolean>;
 

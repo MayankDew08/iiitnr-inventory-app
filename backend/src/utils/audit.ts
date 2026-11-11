@@ -2,6 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import { db } from '../drizzle/db.js';
 import { auditLog } from '../drizzle/schema.js';
 import type { AuditActionTypeValue } from './enums.js';
+import { getClientInfo } from './validation.js';
 
 export interface AuditLogData {
   userId?: string;
@@ -15,8 +16,7 @@ export interface AuditLogData {
 
 export async function logAudit(data: AuditLogData, request?: FastifyRequest): Promise<void> {
   try {
-    const ipAddress = request?.ip;
-    const userAgent = request?.headers['user-agent'];
+    const client = request ? getClientInfo(request) : undefined;
 
     await db.insert(auditLog).values({
       id: crypto.randomUUID(),
@@ -26,8 +26,8 @@ export async function logAudit(data: AuditLogData, request?: FastifyRequest): Pr
       entityId: data.entityId,
       oldValues: data.oldValues ? JSON.stringify(data.oldValues) : undefined,
       newValues: data.newValues ? JSON.stringify(data.newValues) : undefined,
-      ipAddress,
-      userAgent,
+      ipAddress: client?.ip,
+      userAgent: client?.userAgent,
       metadata: data.metadata ? JSON.stringify(data.metadata) : undefined,
       createdAt: new Date().toISOString(),
     });
