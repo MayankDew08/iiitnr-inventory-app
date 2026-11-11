@@ -1,10 +1,10 @@
 import { and, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
-import { request } from '../drizzle/schema.js';
-import { user } from '../drizzle/schema.js';
+import { request, user } from '../drizzle/schema.js';
 import { RequestStatus } from '../utils/enums.js';
 import type { RequestStatusValue } from '../utils/enums.js';
-import { isMailEnabled, sendMail } from './MailService.js';
+import { isMailEnabled } from './MailService.js';
+import { sendTrackedEmail } from './email-service.js';
 
 const RENEWAL_REMINDER_DAYS = 7;
 const RENEWABLE_STATUSES: RequestStatusValue[] = [
@@ -13,6 +13,9 @@ const RENEWABLE_STATUSES: RequestStatusValue[] = [
   RequestStatus.PARTIALLY_RETURNED,
   RequestStatus.RENEWED,
 ];
+
+const RENEWAL_REMINDER_KIND = 'RENEWAL_REMINDER';
+const RENEWAL_REMINDER_VARIANT = 'D7';
 
 export interface RenewalReminderCandidate {
   requestId: string;
@@ -73,15 +76,17 @@ export async function sendRenewalReminders(
   for (const c of candidates) {
     const dueText = formatISTDate(c.returnDueAt);
     const subject = `Reminder: Return due for "${c.projectTitle}" on ${dueText}`;
-    const text = `Hi,
+    const text = `Hi,\n\nThis is a reminder that your request "${c.projectTitle}" is due for return on ${dueText}.\n\nPlease return the items or request a renewal before the due date.\n\n— IIITNR Inventory System`;
 
-This is a reminder that your request "${c.projectTitle}" is due for return on ${dueText}.
-
-Please return the items or request a renewal before the due date.
-
-— IIITNR Inventory System`;
-
-    const ok = await sendMail(c.userEmail, subject, text);
+    const ok = await sendTrackedEmail({
+      requestId: c.requestId,
+      recipientId: c.userId,
+      kind: RENEWAL_REMINDER_KIND,
+      variant: RENEWAL_REMINDER_VARIANT,
+      to: c.userEmail,
+      subject,
+      text,
+    });
     if (ok) {
       sent++;
       await markReminderSent(c.requestId);
@@ -131,8 +136,10 @@ export function startRenewalReminderSweep(
     }
   };
 
-  runSweep();
-  const interval = setInterval(runSweep, intervalMs);
+  runSweep().catch((err) => onError(err));
+  const interval = setInterval(() => {
+    runSweep().catch((err) => onError(err));
+  }, intervalMs);
   interval.unref?.();
 
   return () => clearInterval(interval);

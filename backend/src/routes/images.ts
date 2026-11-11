@@ -7,10 +7,12 @@ import { AuditActionType } from '../utils/enums.js';
 import { logAudit, getUserIdFromRequest } from '../utils/audit.js';
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve as pathResolve, sep } from 'node:path';
+
 import { randomUUID } from 'node:crypto';
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads', 'images');
+const UPLOADS_DIR_RESOLVED = pathResolve(UPLOADS_DIR);
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -60,6 +62,12 @@ function ensureUploadsDir() {
   }
 }
 
+function normalizeUploadPath(base: string, rawName: string): string | null {
+  const target = pathResolve(base, rawName);
+  if (!target.startsWith(base + sep)) return null;
+  return target;
+}
+
 function getPublicUrl(req: FastifyRequest, filename: string): string {
   const host = req.headers.host ?? 'localhost:4000';
   const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
@@ -70,8 +78,10 @@ function deleteFileIfLocal(imageUrl: string | null | undefined): void {
   if (!imageUrl?.includes('/uploads/images/')) return;
   const oldFilename = imageUrl.split('/').pop();
   if (oldFilename) {
+    const safeTarget = normalizeUploadPath(UPLOADS_DIR_RESOLVED, oldFilename);
+    if (!safeTarget) return;
     try {
-      unlinkSync(join(UPLOADS_DIR, oldFilename));
+      unlinkSync(safeTarget);
     } catch {
       /* file may not exist */
     }
@@ -141,9 +151,12 @@ async function handleUploadComponentImage(
       return reply.code(400).send({ error: 'invalid or corrupted image data' });
     }
     const filename = `${randomUUID()}.webp`;
-    const filePath = join(UPLOADS_DIR, filename);
 
-    await writeFile(filePath, processedBuffer);
+    const safeTarget = normalizeUploadPath(UPLOADS_DIR_RESOLVED, filename);
+    if (!safeTarget) {
+      return reply.code(400).send({ error: 'invalid upload path' });
+    }
+    await writeFile(safeTarget, processedBuffer);
 
     deleteFileIfLocal(existing.imageUrl);
 

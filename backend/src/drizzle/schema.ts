@@ -268,6 +268,7 @@ export const requestEmailKind = pgEnum('RequestEmailKind', [
   'RENEWAL_CHASE',
   'EXPIRY_NOTICE',
   'LATE_FEE',
+  'RENEWAL_REMINDER',
 ]);
 
 export const requestEmail = pgTable(

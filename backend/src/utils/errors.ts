@@ -40,13 +40,13 @@ export class ExcessReturnQuantityError extends DomainError {
 }
 
 export class UnauthorizedError extends DomainError {
-  constructor(message: string = 'Unauthorized') {
+  constructor(message = 'Unauthorized') {
     super(401, message, 'UNAUTHORIZED');
   }
 }
 
 export class ForbiddenError extends DomainError {
-  constructor(message: string = 'Forbidden') {
+  constructor(message = 'Forbidden') {
     super(403, message, 'FORBIDDEN');
   }
 }

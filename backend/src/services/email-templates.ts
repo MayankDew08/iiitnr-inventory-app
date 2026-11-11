@@ -50,9 +50,9 @@ export function buildEmailContext(shaped: ShapedRequestLike): EmailRequestContex
     studentEmail: shaped.user?.email ?? '',
     facultyName: shaped.targetFaculty?.name ?? null,
     facultyEmail: shaped.targetFaculty?.email ?? '',
-    items: (shaped.items ?? [])
-      .filter((item) => item.component?.name)
-      .map((item) => ({ name: item.component!.name, quantity: item.quantity })),
+    items: (shaped.items ?? []).flatMap(({ component, quantity }) =>
+      component?.name != null ? [{ name: component.name, quantity }] : [],
+    ),
   };
 }
 

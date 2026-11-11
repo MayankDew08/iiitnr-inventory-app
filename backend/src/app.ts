@@ -107,7 +107,7 @@ function buildRateLimitConfig(app: FastifyInstance) {
     // header: an unauthenticated client can send any header value it likes, so
     // keying on the header hands every request a fresh bucket. Unauthenticated
     // and forged-token requests fall back to the client IP.
-    keyGenerator: async (request: FastifyRequest) => {
+    keyGenerator: (request: FastifyRequest) => {
       const token = readBearerToken(request);
       if (token) {
         try {
@@ -122,7 +122,10 @@ function buildRateLimitConfig(app: FastifyInstance) {
     // The plugin throws whatever this returns, so it has to be an Error carrying
     // the status code; a bare object reaches the error handler with no status
     // and is reported as a 500.
-    errorResponseBuilder: (_request: FastifyRequest, context: { ttl: number; statusCode: number }) => {
+    errorResponseBuilder: (
+      _request: FastifyRequest,
+      context: { ttl: number; statusCode: number },
+    ) => {
       const error = new Error(
         `Too many requests. Please wait ${Math.ceil(context.ttl / 1000)} seconds before retrying.`,
       ) as Error & { statusCode: number; code: string };

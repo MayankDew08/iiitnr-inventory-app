@@ -3,7 +3,8 @@ import { db } from '../drizzle/db.js';
 import { requestEmail } from '../drizzle/schema.js';
 import { sendMail } from './MailService.js';
 
-export type RequestEmailKindValue = 'RENEWAL_CHASE' | 'EXPIRY_NOTICE' | 'LATE_FEE';
+export type RequestEmailKindValue =
+  'RENEWAL_CHASE' | 'EXPIRY_NOTICE' | 'LATE_FEE' | 'RENEWAL_REMINDER';
 
 type MailSender = (to: string, subject: string, text: string) => Promise<boolean>;
 

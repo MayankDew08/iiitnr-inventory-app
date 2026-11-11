@@ -1,36 +1,32 @@
 const { defineConfig } = require('eslint/config');
-
-const globals = require('globals');
-const tsParser = require('@typescript-eslint/parser');
-const typescriptEslint = require('@typescript-eslint/eslint-plugin');
 const js = require('@eslint/js');
-
-const { FlatCompat } = require('@eslint/eslintrc');
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all,
-});
+const globals = require('globals');
+const tsEslint = require('typescript-eslint');
+const security = require('eslint-plugin-security');
+const prettier = require('eslint-config-prettier');
 
 module.exports = defineConfig([
+  { ignores: ['dist/**', 'coverage/**', '**/*.d.ts', 'drizzle/**'] },
+
+  js.configs.recommended,
+  ...tsEslint.configs.recommended,
+
   {
+    files: ['**/*.ts'],
     languageOptions: {
-      globals: {
-        ...globals.node,
-      },
-
-      parser: tsParser,
+      globals: { ...globals.node },
+      parserOptions: { projectService: true, tsconfigRootDir: __dirname },
     },
-
-    plugins: {
-      '@typescript-eslint': typescriptEslint,
+    plugins: { security },
+    rules: {
+      'security/detect-object-injection': 'off',
+      'security/detect-non-literal-fs-filename': 'off',
+      '@typescript-eslint/no-floating-promises': 'warn',
+      '@typescript-eslint/no-misused-promises': 'warn',
+      '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
-
-    extends: compat.extends(
-      'eslint:recommended',
-      'plugin:@typescript-eslint/recommended',
-      'prettier',
-    ),
   },
+
+  prettier,
 ]);

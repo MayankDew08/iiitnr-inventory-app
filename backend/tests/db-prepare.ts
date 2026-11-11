@@ -27,8 +27,10 @@ async function waitForDb(maxAttempts = 30): Promise<void> {
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const migrationsFolder = join(__dirname, '..', 'src', 'drizzle');
+
 await waitForDb();
-await migrate(db, { migrationsFolder: join(__dirname, '..', 'src', 'drizzle') });
+await migrate(db, { migrationsFolder });
 console.log('Migrations complete');
 
 const truncatePool = new Pool({ connectionString: url });

@@ -1,8 +1,7 @@
 import 'dotenv/config';
 import { pool, db } from './drizzle/db.js';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -17,4 +16,7 @@ const migrationsFolder = process.env.MIGRATIONS_FOLDER ?? join(__dirname, 'drizz
   } finally {
     await pool.end();
   }
-})();
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

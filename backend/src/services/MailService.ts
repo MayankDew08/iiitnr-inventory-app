@@ -88,7 +88,7 @@ export async function sendMail(to: string, subject: string, text: string): Promi
     return false;
   }
 
-  const from = resolveMailConfig()?.from ?? process.env.SMTP_FROM!;
+  const from = resolveMailConfig()?.from ?? process.env.SMTP_FROM ?? '';
   try {
     await tx.sendMail({ from, to, subject, text });
     return true;
