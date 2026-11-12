@@ -117,10 +117,11 @@ describe('computeLateFee', () => {
     expect(computeLateFee(7)).toBe(7);
   });
 
-  test('caps the charge at one return period', () => {
-    expect(computeLateFee(30)).toBe(30);
-    expect(computeLateFee(45)).toBe(30);
-    expect(computeLateFee(365)).toBe(30);
+  test('caps the charge at one 4-year programme length', () => {
+    expect(computeLateFee(365)).toBe(365);
+    expect(computeLateFee(1460)).toBe(1460);
+    expect(computeLateFee(1500)).toBe(1460);
+    expect(computeLateFee(3650)).toBe(1460);
   });
 });
 
