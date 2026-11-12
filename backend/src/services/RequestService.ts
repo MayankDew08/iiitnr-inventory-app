@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { component, request, requestItem, user } from '../drizzle/schema.js';
@@ -81,7 +82,7 @@ export function generateRequestOtp(requestId: string): { otp: string; expiresAt:
 
   let code: string;
   do {
-    code = Math.floor(1000 + Math.random() * 9000).toString();
+    code = randomInt(1000, 10000).toString();
   } while (otpStore.has(code));
 
   const expiresAtMs = now + 10 * 60 * 1000;

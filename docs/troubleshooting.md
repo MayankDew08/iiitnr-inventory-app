@@ -43,8 +43,6 @@ is silent. Check, in order:
 2. `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` are all set
 3. The backend was **restarted** after the env change — the transporter is built
    once at startup
-4. `Failed to send email` appears in the backend logs (that is the only place a
-   send failure is reported)
 
 To try a send by hand, run the mail service directly:
 
@@ -57,7 +55,7 @@ console.log(ok ? "sent" : "failed");
 '
 ```
 
-### `Failed to send email: "<address>" is not a deliverable address`
+### `address is not a deliverable address`
 
 The address in the user row is not a valid email — the backend skips it instead
 of failing the whole sweep. Fix the address in the admin user panel.

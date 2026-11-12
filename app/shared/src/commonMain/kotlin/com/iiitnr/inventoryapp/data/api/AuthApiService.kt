@@ -36,7 +36,7 @@ class AuthApiService(
             }
         return when (response.status.value) {
             in 200..299 -> response.body()
-            else -> throw Exception("${response.status.value}: ${parseErrorResponse(response)}")
+            else -> throw IllegalStateException("${response.status.value}: ${parseErrorResponse(response)}")
         }
     }
 
@@ -48,7 +48,7 @@ class AuthApiService(
             }
         return when (response.status.value) {
             in 200..299 -> response.body()
-            else -> throw Exception("${response.status.value}: ${parseErrorResponse(response)}")
+            else -> throw IllegalStateException("${response.status.value}: ${parseErrorResponse(response)}")
         }
     }
 
@@ -60,7 +60,7 @@ class AuthApiService(
             }
         return when (response.status.value) {
             in 200..299 -> response.body()
-            else -> throw Exception("${response.status.value}: ${parseErrorResponse(response)}")
+            else -> throw IllegalStateException("${response.status.value}: ${parseErrorResponse(response)}")
         }
     }
 

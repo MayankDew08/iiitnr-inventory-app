@@ -188,10 +188,7 @@ export function startLateFeeSweep(
 ) {
   return startIntervalSweep(
     async () => {
-      const result = await runLateFeeSweep();
-      if (result.sent > 0 || result.feesUpdated > 0) {
-        console.log('Late fee sweep', result);
-      }
+      await runLateFeeSweep();
     },
     onError,
     intervalMs,

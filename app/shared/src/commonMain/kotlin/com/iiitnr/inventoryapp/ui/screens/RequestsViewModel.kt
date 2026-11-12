@@ -51,7 +51,7 @@ class RequestsViewModel(
 
     fun exportRequestsCsv(): String? {
         val user = currentUser ?: return null
-        if (user.role != UserRole.ADMIN && user.role != UserRole.LA && user.role != UserRole.FACULTY) return null
+        if (user.role !in setOf(UserRole.ADMIN, UserRole.LA, UserRole.FACULTY)) return null
         if (requests.isEmpty()) return null
 
         return buildRequestsCsv(requests)

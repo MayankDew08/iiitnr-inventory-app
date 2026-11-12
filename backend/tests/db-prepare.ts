@@ -18,7 +18,6 @@ async function waitForDb(maxAttempts = 30): Promise<void> {
       await p.end();
       return;
     } catch (err) {
-      console.warn(`⚠️ DB not ready (attempt ${i + 1}/${maxAttempts}): ${(err as Error).message}`);
       await p.end().catch(() => {});
       await new Promise((r) => setTimeout(r, 500));
     }
@@ -31,7 +30,6 @@ const migrationsFolder = join(__dirname, '..', 'src', 'drizzle');
 
 await waitForDb();
 await migrate(db, { migrationsFolder });
-console.log('Migrations complete');
 
 const truncatePool = new Pool({ connectionString: url });
 try {
@@ -42,4 +40,3 @@ try {
   await truncatePool.end();
 }
 await pool.end();
-console.log('Test database prepared (migrated + truncated)');

@@ -129,10 +129,7 @@ export function startRenewalChaseSweep(
 ) {
   return startIntervalSweep(
     async () => {
-      const result = await runRenewalChaseSweep();
-      if (result.sent > 0) {
-        console.log('Renewal chase sweep', result);
-      }
+      await runRenewalChaseSweep();
     },
     onError,
     intervalMs,

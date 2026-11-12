@@ -349,7 +349,7 @@ async function handleGetRequests(
 
   if (status === RequestStatus.EXPIRED) {
     const expired = await expireOverdueRequests();
-    fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
+    await fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
   }
 
   const isAdmin = isAdminOrLA(currentUser.role);
@@ -736,7 +736,7 @@ async function handleUpdateRequestStatus(
   }
 
   const expired = await expireOverdueRequests({ requestId: id });
-  fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
+  await fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
 
   const existingRequest = await RequestService.fetchRequestWithItems(id);
 
@@ -835,7 +835,7 @@ async function handleDeleteRequest(
   }
 
   const expired = await expireOverdueRequests({ requestId: id });
-  fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
+  await fanOutExpiredRequests(expired, (err, message) => req.log.error({ err }, message));
 
   const existingRequest = await RequestService.fetchRequestWithItems(id);
 

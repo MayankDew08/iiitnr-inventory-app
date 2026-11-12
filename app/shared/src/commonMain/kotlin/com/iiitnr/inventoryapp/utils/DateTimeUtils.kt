@@ -35,7 +35,7 @@ fun getRelativeDays(
     val dateTime =
         try {
             LocalDateTime.parse(dateTimeString.replace(' ', 'T'))
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             return ""
         }
     val date = dateTime.date
@@ -56,7 +56,7 @@ fun formatDisplayDate(dateTimeString: String?): String {
     val date =
         try {
             LocalDateTime.parse(dateTimeString.replace(' ', 'T')).date
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             return ""
         }
     val month =
@@ -75,7 +75,7 @@ fun isOverdue(
     val date =
         try {
             LocalDateTime.parse(dateTimeString.replace(' ', 'T')).date
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             return false
         }
     return date < today

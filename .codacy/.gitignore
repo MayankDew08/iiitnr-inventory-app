@@ -1,0 +1,6 @@
+generated/
+tmp/
+
+# Codacy CLI generated config artifacts (not committed; regenerate from the Codacy dashboard)
+codacy.config.baseline.json
+codacy.config.json

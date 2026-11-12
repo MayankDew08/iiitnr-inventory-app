@@ -49,3 +49,6 @@ __tests__
 
 uploads/
 certs/
+.bun
+*.tsbuildinfo
+bun.lockb

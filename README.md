@@ -261,7 +261,7 @@ platform tools** (`adb`) for `just andro`.
    |---|---|
    | `JWT_SECRET` | Signs auth tokens — generate with `openssl rand -hex 32` |
    | `DATABASE_URL` | PostgreSQL connection string — set this when pointing at an existing database |
-   | `DB_USER` + `DB_PASSWORD` | **Alternative to** `DATABASE_URL` (if want to use local postgres DB with compose)
+   | `DB_USER` + `DB_PASSWORD` | **Alternative to** `DATABASE_URL` (if you want to use the local Postgres DB started by Compose)
 
 
 4. **Spin up a local PostgreSQL Instance (via Podman Compose):**
@@ -330,19 +330,24 @@ cd app
 
 ## 🧰 Justfile Task Runner Cheatsheet
 
-If you have `just` runner installed, you can use the following shortcuts from the **root** of the repository. Run `just` on its own for the default `dev` task, or `just --list` to see every available recipe.
+If you have `just` runner installed, you can use the following shortcuts from the **root** of the repository. Run `just` on its own for an interactive chooser, or `just --list` to see every available recipe.
 
 **Local development & quality**
 
 | Command | Action Description | Target Component |
 | :--- | :--- | :--- |
 | `just install` | Installs backend node modules using `bun` | Backend |
+| `just image` | Builds the multi-stage backend container image | Container |
+| `just size` | Prints the built image and its layers | Container |
+| `just run` | Runs the built container with the project `.env` on port 4000 | Container |
+| `just run-ro` | Runs the container read-only with `/tmp` tmpfs and an uploads bind mount | Container |
+| `just seed` | Runs the seed script inside a container (`SKIP_SEED=1` is set in the recipe, so this is mostly illustrative) | Container |
 | `just dev` | Runs the database migrations and boots the backend in watch mode | Backend |
 | `just db-up` | Starts a PostgreSQL instance using Compose | Database |
 | `just db-down` | Tears down the PostgreSQL Compose instance | Database |
-| `just up` / `just down` | Spins up/down the complete Podman Compose stack | Full Stack |
+| `just up` / `just down` | Spins up/down the development Podman Compose stack (`compose.yaml`) | Full Stack |
 | `just logs` | Follows logs from the compose container stack | Diagnostics |
-| `just test` | Launches database and executes the backend test suite | Quality / CI |
+| `just test` | Starts the test database via Compose and runs the backend test suite; the Compose teardown runs on exit | Quality / CI |
 | `just desk` | Compiles and launches the desktop app locally | Compose Desktop |
 | `just andro` | Builds the debug APK and installs it on the connected device | Compose Android |
 | `just web` | Launches the Kotlin WasmJs web application | Compose Web |
@@ -359,7 +364,7 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | `just deploy-web` | Builds the web client and publishes it to `/srv/web` |
 | `just deploy` | Pulls the latest commit, redeploys the web app and rebuilds the backend container |
 | `just release <version>` | Pushes to `main` and creates a GitHub release with generated notes |
-| `just push` | Typechecks, tests and runs detekt before pushing to the remote |
+| `just push` | Typechecks, runs the schema check, tests and detekt before pushing to the remote |
 
 ---
 
@@ -373,9 +378,10 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common failures and how to fix them |
 
 **Contributing:** run `just push` before opening a pull request — it typechecks,
-runs the test suite and the Kotlin static analysis, the same gates CI enforces
-on every pull request.
+checks `docs/schema.md`, runs the test suite, and runs detekt, the same gates CI
+enforces on every pull request.
 
 ---
 
 *Made with ❤️ for IIIT Naya Raipur.*
+

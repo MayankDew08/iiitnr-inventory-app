@@ -50,7 +50,6 @@ if (!dbUrlForMigrations) {
 }
 
 try {
-  console.log('📦 Preparing test database (wait + migrate + truncate)...');
   execSync('bun run tests/db-prepare.ts', {
     stdio: 'inherit',
     env: {

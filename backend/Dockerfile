@@ -1,29 +1,30 @@
-FROM docker.io/oven/bun:1.4.0-alpine AS base
+FROM docker.io/oven/bun:1.4.4-slim AS builder
 WORKDIR /app
-
-FROM base AS builder
-# Install deps (all — needed for typecheck)
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
-
-# Copy source and typecheck
 COPY . .
 RUN bun run typecheck
 
-# Prune to production deps only (no reinstall — just filter in place)
+# ---------- Prod deps: clean slate, dev deps never installed ----------
+FROM docker.io/oven/bun:1.4.4-slim AS prod-deps
+WORKDIR /app
+COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-FROM base AS runner
-RUN apk add --no-cache openssl ca-certificates libgcc libstdc++
+FROM docker.io/oven/bun:1.4.4-slim AS uploads
+RUN mkdir -p /app/uploads/images && chown -R 65532:65532 /app/uploads
 
+FROM docker.io/oven/bun:1.4.4-distroless AS runner
 WORKDIR /app
-RUN mkdir -p /app/uploads/images
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/src ./src
-COPY --from=builder /app/scripts ./scripts
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
-
+COPY --from=prod-deps --chown=65532:65532 /app/node_modules ./node_modules
+COPY --from=builder   --chown=65532:65532 /app/src ./src
+COPY --from=builder   --chown=65532:65532 /app/scripts ./scripts
+COPY --from=builder   --chown=65532:65532 /app/package.json ./package.json
+COPY --from=builder   --chown=65532:65532 /app/entrypoint.ts ./entrypoint.ts
+COPY --from=uploads   --chown=65532:65532 /app/uploads ./uploads
 EXPOSE 4000
-ENTRYPOINT ["./docker-entrypoint.sh"]
+
+#HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+#  CMD ["/usr/local/bin/bun", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+USER 65532:65532
+ENTRYPOINT ["/usr/local/bin/bun", "run", "entrypoint.ts"]

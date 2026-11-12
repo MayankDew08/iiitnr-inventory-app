@@ -122,10 +122,7 @@ export function startRenewalReminderSweep(
 ) {
   return startIntervalSweep(
     async () => {
-      const result = await runRenewalReminderSweep();
-      if (result.candidates > 0) {
-        console.log('Renewal reminder sweep', result);
-      }
+      await runRenewalReminderSweep();
     },
     onError,
     intervalMs,

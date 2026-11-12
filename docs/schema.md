@@ -96,7 +96,7 @@ erDiagram
         text id PK
         text requestId FK
         text recipientId FK
-        RequestEmailKind kind "RENEWAL_CHASE|EXPIRY_NOTICE|LATE_FEE"
+        RequestEmailKind kind "RENEWAL_CHASE|EXPIRY_NOTICE|LATE_FEE|RENEWAL_REMINDER"
         text variant
         text subject
         text metadata

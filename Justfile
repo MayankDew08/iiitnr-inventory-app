@@ -1,146 +1,180 @@
-set windows-shell := ["cmd.exe", "/c"]
-set dotenv-load := true
+set dotenv-load     := true
 set dotenv-filename := "backend/.env"
 
-default: dev
+set shell         := ["bash", "-uc"]
+set windows-shell := ["cmd.exe", "/c"]
 
+backend := "backend"
+app     := "app"
+
+img     := "iiitnr-inventory"
+tag     := "latest"
+port    := "4000"
+uploads := "uploads"
+
+test_db_url := "postgresql://postgres:postgres@localhost:5432/iiitnr_inventory_test"
+
+gradle := if os() == "windows" { ".\\gradlew.bat" } else { "./gradlew" }
+
+default:
+    @just --choose
+
+[group('setup')]
 install:
-    cd backend && bun install
+    cd {{backend}} && bun install
 
-up-dep:
-    cd backend && bun update --latest && bun install && just test
+[group('setup')]
+update-deps:
+    cd {{backend}} && bun update --latest && bun install
+    just test
 
-image:
-    cd backend && podman build -t test . && podman images test && podman run --env-file .env -p4000:4000 test
-
+[group('dev')]
 dev:
-    cd backend && bun run dev
+    cd {{backend}} && bun run dev
 
-db-up:
-    cd backend && podman compose -f compose.db.yaml --profile test up -d
-
-db-down:
-    cd backend && podman compose -f compose.db.yaml --profile test down
-
+[group('dev')]
 up:
-    cd backend && podman compose up -d
+    cd {{backend}} && podman compose up -d
 
+[group('dev')]
 down:
-    cd backend && podman compose down
+    cd {{backend}} && podman compose down
 
+[group('dev')]
 restart:
-    cd backend && podman compose down
-    cd backend && podman compose up -d
+    cd {{backend}} && podman compose down && podman compose up -d
 
+[group('dev')]
 logs:
-    cd backend && podman compose logs -f
+    cd {{backend}} && podman compose logs -f
 
-test:
-    just db-down
-    just install
-    cd backend && podman-compose -f compose.db.yaml --profile test up -d
-    export TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/iiitnr_inventory_test"; cd backend && bun test --parallel=1
-    cd backend && podman-compose -f compose.db.yaml --profile test down
+[group('dev')]
+db-up:
+    cd {{backend}} && podman compose -f compose.db.yaml --profile test up -d
 
-[unix]
-desk:
-    cd app && _JAVA_AWT_WM_NONREPARENTING=1 ./gradlew desktop:run -PappDebug=true
+[group('dev')]
+db-down:
+    cd {{backend}} && podman compose -f compose.db.yaml --profile test down
 
-[windows]
-desk:
-    cd app && .\gradlew.bat desktop:run -PappDebug=true
+[group('test')]
+test: install
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{backend}}
+    trap 'podman compose -f compose.db.yaml --profile test down' EXIT
+    podman compose -f compose.db.yaml --profile test up -d
+    export TEST_DATABASE_URL="{{test_db_url}}"
+    bun test --parallel=1 --only-failures
 
-[unix]
-andro:
-    rm -f app/android/build/outputs/apk/debug/com.iiitnr.inventoryapp-*.apk
-    cd app && ./gradlew assembleDebug -PappDebug=true
-    adb install app/android/build/outputs/apk/debug/com.iiitnr.inventoryapp-*.apk
-
-[windows]
-andro:
-    del /q app\android\build\outputs\apk\debug\com.iiitnr.inventoryapp-*.apk 2>nul
-    cd app && .\gradlew.bat assembleDebug -PappDebug=true
-    for %f in (app\android\build\outputs\apk\debug\com.iiitnr.inventoryapp-*.apk) do adb install %f
-
-
-[unix]
-lint:
-    cd backend && bun run lint
-    cd app && ./gradlew ktlintCheck
-
-[windows]
-lint:
-    cd backend && bun run lint
-    cd app && .\gradlew.bat ktlintCheck
-
-[unix]
-lint-fix:
-    cd backend && bun run lint:fix
-    cd app && ./gradlew ktlintFormat
-
-[windows]
-lint-fix:
-    cd backend && bun run lint:fix
-    cd app && .\gradlew.bat ktlintFormat
-
+[group('quality')]
 typecheck:
-    cd backend && bun run typecheck
+    cd {{backend}} && bun run typecheck
 
+[group('quality')]
+lint:
+    cd {{backend}} && bun run lint
+    cd {{app}} && {{gradle}} ktlintCheck
+
+[group('quality')]
+lint-fix:
+    cd {{backend}} && bun run lint:fix
+    cd {{app}} && {{gradle}} ktlintFormat
+
+[group('quality')]
+fmt:
+    cd {{backend}} && bun run format
+    cd {{app}} && {{gradle}} ktlintFormat
+
+[group('quality')]
+detekt:
+    cd {{app}} && {{gradle}} detekt
+
+[group('quality')]
+check: typecheck lint detekt check-schema test
+
+[group('schema')]
 gen-schema:
-    cd backend && bun run scripts/generate-schema-docs.ts
+    cd {{backend}} && bun run scripts/generate-schema-docs.ts
 
+[group('schema')]
 check-schema:
-    cd backend && bun run scripts/generate-schema-docs.ts --check
+    cd {{backend}} && bun run scripts/generate-schema-docs.ts --check
 
-[unix]
-fmt:
-    cd backend && bun run format
-    cd app && ./gradlew ktlintFormat
-
-[windows]
-fmt:
-    cd backend && bun run format
-    cd app && .\gradlew.bat ktlintFormat
-
-[unix]
-detekt:
-    cd app && ./gradlew detekt
-
-[windows]
-detekt:
-    cd app && .\gradlew.bat detekt
-
-
-[unix]
 web:
-    cd app && ./gradlew :web:wasmJsBrowserDevelopmentRun -PappDebug=true
+    cd {{app}} && {{gradle}} :web:wasmJsBrowserDevelopmentRun -PappDebug=true
+
+[unix]
+desk:
+    cd {{app}} && _JAVA_AWT_WM_NONREPARENTING=1 {{gradle}} desktop:run -PappDebug=true
 
 [windows]
-web:
-    cd app && ./gradlew :web:wasmJsBrowserDevelopmentRun -PappDebug=true
+desk:
+    cd {{app}} && {{gradle}} desktop:run -PappDebug=true
+
+[unix]
+andro:
+    rm -f {{app}}/android/build/outputs/apk/debug/com.iiitnr.inventoryapp-*.apk
+    cd {{app}} && {{gradle}} assembleDebug -PappDebug=true
+    adb install {{app}}/android/build/outputs/apk/debug/com.iiitnr.inventoryapp-*.apk
+
+[windows]
+andro:
+    del /q {{app}}\android\build\outputs\apk\debug\com.iiitnr.inventoryapp-*.apk 2>nul
+    cd {{app}} && {{gradle}} assembleDebug -PappDebug=true
+    for %%f in ({{app}}\android\build\outputs\apk\debug\com.iiitnr.inventoryapp-*.apk) do adb install %%f
+
+
+[group('container')]
+image:
+    cd {{backend}} && podman build -t {{img}}:{{tag}} .
+
+[group('container')]
+size: image
+    podman images {{img}}:{{tag}}
+    podman history {{img}}:{{tag}} | head -12
+[group('container')]
+run:
+    cd {{backend}} && podman run --rm --name backend-dev \
+      --env-file .env \
+      -p {{port}}:{{port}} \
+      -v ./uploads:/app/uploads \
+      {{img}}:{{tag}}
+
+[group('container')]
+run-ro:
+    cd {{backend}} && podman run --rm --name backend-dev-ro \
+      --read-only --tmpfs /tmp \
+      --env-file .env -e SKIP_SEED=1 \
+      -p {{port}}:{{port}} \
+      -v ./uploads:/app/uploads \
+      {{img}}:{{tag}}
+
+[group('container')]
+seed:
+    cd {{backend}} && podman run --rm --env-file .env \
+      --entrypoint /usr/local/bin/bun {{img}}:{{tag}} run scripts/seed.ts
 
 [unix]
 deploy-web:
-    @if [ -z "$GOOGLE_WEB_CLIENT_ID" ]; then echo "ERROR: GOOGLE_WEB_CLIENT_ID not loaded from backend/.env"; exit 1; fi
-    cd app && ./gradlew :web:wasmJsBrowserDistribution -Pkotlin.native.ignoreDisabledTargets=true
+    @if [ -z "${GOOGLE_WEB_CLIENT_ID:-}" ]; then \
+      echo "ERROR: GOOGLE_WEB_CLIENT_ID not set (check backend/.env)"; exit 1; fi
+    cd {{app}} && {{gradle}} :web:wasmJsBrowserDistribution -Pkotlin.native.ignoreDisabledTargets=true
     mkdir -p /srv/web
-    cp -r app/web/build/dist/wasmJs/productionExecutable/. /srv/web/
+    cp -r {{app}}/web/build/dist/wasmJs/productionExecutable/. /srv/web/
     echo "Web app deployed to /srv/web"
 
+[unix]
 deploy:
     git pull
     just deploy-web
-    podman compose -f backend/compose.prod.yaml down
-    podman compose -f backend/compose.prod.yaml up --build -d --force-recreate backend
+    podman compose -f {{backend}}/compose.prod.yaml down backend
+    podman compose -f {{backend}}/compose.prod.yaml up --build -d --force-recreate backend
 
+[unix]
+push: typecheck check-schema test detekt
+    git push
+
+[unix]
 release version:
     git push origin main
     gh release create v{{version}} --target main --generate-notes
-
-push:
-    cd backend && bun run typecheck
-    # cd backend && bun run lint
-    check-schema
-    just test
-    just detekt
-    git push
