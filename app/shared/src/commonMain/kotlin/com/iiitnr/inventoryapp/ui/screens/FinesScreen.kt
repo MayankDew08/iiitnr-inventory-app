@@ -68,7 +68,10 @@ fun FinesScreen(
                 }
 
                 viewModel.errorMessage != null -> {
-                    FinesErrorState(onRetry = { viewModel.load() })
+                    FinesErrorState(
+                        detail = viewModel.errorMessage,
+                        onRetry = { viewModel.load() },
+                    )
                 }
 
                 viewModel.fines.isEmpty() -> {
@@ -87,9 +90,9 @@ fun FinesScreen(
         }
     }
 
-    if (selectedRequest != null) {
+    selectedRequest?.let { request ->
         RequestDetailDialog(
-            request = selectedRequest!!,
+            request = request,
             onDismiss = { selectedRequest = null },
         )
     }
@@ -112,7 +115,7 @@ private fun FinesContent(
             )
         }
 
-        items(fines) { request ->
+        items(fines, key = { it.id }) { request ->
             FineCard(
                 request = request,
                 today = today,
@@ -213,12 +216,8 @@ private fun FineCard(
 
             Spacer(Modifier.height(4.dp))
 
-            val itemsSummary =
-                request.items.joinToString(", ") {
-                    "${it.component?.name ?: it.componentId.orEmpty()} × ${it.quantity}"
-                }
             Text(
-                text = itemsSummary,
+                text = itemsSummary(request),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -236,6 +235,14 @@ private fun FineCard(
     }
 }
 
+private fun itemsSummary(request: Request): String {
+    if (request.items.isEmpty()) return "No items on this request"
+    return request.items.joinToString(", ") { item ->
+        val name = item.component?.name?.takeIf { it.isNotBlank() } ?: item.componentId ?: "Unknown item"
+        "$name × ${item.quantity}"
+    }
+}
+
 private fun daysLateLabel(
     returnDueAt: String?,
     today: LocalDate,
@@ -247,8 +254,11 @@ private fun daysLateLabel(
             null
         } ?: return "Overdue"
 
-    val daysLate = today.toEpochDays() - dueDate.toEpochDays()
-    return "$daysLate days late · due ${formatDisplayDate(returnDueAt)}"
+    // Clamp instead of trusting the raw difference: a stale/incorrect due date
+    // (or a client clock behind the server) could otherwise render "-2 days late".
+    val daysLate = maxOf(0L, today.toEpochDays() - dueDate.toEpochDays())
+    val unit = if (daysLate == 1L) "day" else "days"
+    return "$daysLate $unit late · due ${formatDisplayDate(returnDueAt)}"
 }
 
 @Composable
@@ -275,13 +285,25 @@ private fun FinesEmptyState() {
 }
 
 @Composable
-private fun FinesErrorState(onRetry: () -> Unit) {
+private fun FinesErrorState(
+    detail: String?,
+    onRetry: () -> Unit,
+) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "Couldn't load your fines.",
                 style = MaterialTheme.typography.titleMedium,
             )
+            if (!detail.isNullOrBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = onRetry) {
                 Text("Try again")
