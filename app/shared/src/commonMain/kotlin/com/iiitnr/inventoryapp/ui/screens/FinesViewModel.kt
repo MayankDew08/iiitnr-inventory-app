@@ -6,8 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.models.AppError
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.storage.TokenManager
+import com.iiitnr.inventoryapp.utils.toAppError
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -28,6 +30,8 @@ class FinesViewModel(
     }
 
     fun load() {
+        if (isLoading) return
+
         viewModelScope.launch {
             isLoading = true
             errorMessage = null
@@ -40,11 +44,19 @@ class FinesViewModel(
                     errorMessage = "No authentication token"
                 }
             } catch (e: Throwable) {
-                errorMessage = "Couldn't load your fines."
+                handleLoadError(e)
             } finally {
                 isLoading = false
             }
         }
+    }
+
+    private suspend fun handleLoadError(e: Throwable) {
+        val appError = e.toAppError()
+        // Unauthorized is handled globally (AuthEventManager redirects to login);
+        // surfacing a fines-specific error here would just flash before that redirect.
+        if (appError is AppError.Unauthorized) return
+        errorMessage = appError.message
     }
 }
 
