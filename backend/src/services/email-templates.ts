@@ -2,7 +2,7 @@ import { formatIstDate } from './date-utils.js';
 
 export const LATE_FEE_PER_DAY = 1;
 
-export const LATE_FEE_CAP_DAYS = 30;
+export const LATE_FEE_CAP_DAYS = 4 * 365;
 export const LATE_FEE_CAP = LATE_FEE_PER_DAY * LATE_FEE_CAP_DAYS;
 
 export const LATE_FEE_LADDER = [
@@ -203,11 +203,11 @@ The items (${itemSummary(ctx.items)}) have been written off the lab inventory an
 
     D14: `${opening}
 
-The items (${itemSummary(ctx.items)}) have been written off the lab inventory and the charge is now at its cap of ₹${LATE_FEE_CAP}. Please return them to the lab, or talk to your supervisor if you still need them.`,
+The items (${itemSummary(ctx.items)}) have been written off the lab inventory and the charge keeps growing. Please return them to the lab, or talk to your supervisor if you still need them.`,
 
     D30: `${opening}
 
-The items (${itemSummary(ctx.items)}) have been written off the lab inventory and the charge has reached its cap of ₹${LATE_FEE_CAP}. Please return them to the lab as soon as possible.`,
+The items (${itemSummary(ctx.items)}) have been written off the lab inventory and the charge keeps growing. Please return them to the lab as soon as possible.`,
   };
 
   const text =
