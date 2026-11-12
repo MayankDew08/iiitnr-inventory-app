@@ -26,6 +26,7 @@ import com.iiitnr.inventoryapp.data.api.AuthEventManager
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.ui.screens.AuditLogScreen
 import com.iiitnr.inventoryapp.ui.screens.ComponentsScreen
+import com.iiitnr.inventoryapp.ui.screens.FinesScreen
 import com.iiitnr.inventoryapp.ui.screens.LoginScreen
 import com.iiitnr.inventoryapp.ui.screens.NotificationsScreen
 import com.iiitnr.inventoryapp.ui.screens.ProfileScreen
@@ -140,8 +141,16 @@ fun App(
                                 onNavigateToNotifications = {
                                     navController.navigate("notifications")
                                 },
+                                onNavigateToFines = {
+                                    navController.navigate("fines")
+                                },
                                 onExportCsv = onExportComponentsCsv,
                                 onImportCsv = onImportComponentsCsv,
+                            )
+                        }
+                        composable("fines") {
+                            FinesScreen(
+                                onNavigateBack = { navController.popBackStack() },
                             )
                         }
                         composable("profile") {

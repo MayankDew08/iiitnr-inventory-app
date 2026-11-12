@@ -49,6 +49,7 @@ fun ComponentsScreen(
     onExportCsv: ((String) -> Boolean)? = null,
     onImportCsv: (((String?) -> Unit) -> Unit)? = null,
     onNavigateToNotifications: () -> Unit = {},
+    onNavigateToFines: (() -> Unit)? = null,
     viewModel: ComponentsViewModel = koinViewModel(),
     notificationsViewModel: NotificationsViewModel = koinViewModel(),
 ) {
@@ -112,6 +113,12 @@ fun ComponentsScreen(
                 isImportingCsv = viewModel.isImportingCsv,
                 unreadNotificationCount = notificationsViewModel.unreadCount,
                 onNavigateToNotifications = onNavigateToNotifications,
+                onNavigateToFines =
+                    if (viewModel.userRole == UserRole.STUDENT) {
+                        onNavigateToFines
+                    } else {
+                        null
+                    },
             )
         },
         floatingActionButton = {

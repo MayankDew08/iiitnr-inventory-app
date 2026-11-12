@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.FileUpload
@@ -36,6 +37,7 @@ fun ComponentsTopBar(
     isImportingCsv: Boolean = false,
     unreadNotificationCount: Int = 0,
     onNavigateToNotifications: (() -> Unit)? = null,
+    onNavigateToFines: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     AppTopBar(
@@ -87,6 +89,14 @@ fun ComponentsTopBar(
                             )
                         }
                     }
+                }
+            }
+            onNavigateToFines?.let { nav ->
+                IconButton(onClick = nav) {
+                    Icon(
+                        imageVector = Icons.Default.Payments,
+                        contentDescription = "Fines",
+                    )
                 }
             }
             if (onNavigateToNotifications != null) {
