@@ -50,6 +50,7 @@ fun ComponentsScreen(
     onImportCsv: (((String?) -> Unit) -> Unit)? = null,
     onNavigateToNotifications: () -> Unit = {},
     onNavigateToFines: (() -> Unit)? = null,
+    onNavigateToFinesAdmin: (() -> Unit)? = null,
     viewModel: ComponentsViewModel = koinViewModel(),
     notificationsViewModel: NotificationsViewModel = koinViewModel(),
 ) {
@@ -114,10 +115,10 @@ fun ComponentsScreen(
                 unreadNotificationCount = notificationsViewModel.unreadCount,
                 onNavigateToNotifications = onNavigateToNotifications,
                 onNavigateToFines =
-                    if (viewModel.userRole == UserRole.STUDENT) {
-                        onNavigateToFines
-                    } else {
-                        null
+                    when (viewModel.userRole) {
+                        UserRole.STUDENT -> onNavigateToFines
+                        UserRole.LA, UserRole.ADMIN -> onNavigateToFinesAdmin
+                        else -> null
                     },
             )
         },

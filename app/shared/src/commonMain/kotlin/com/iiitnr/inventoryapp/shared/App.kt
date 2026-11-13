@@ -16,9 +16,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.savedstate.read
 import com.iiitnr.inventoryapp.data.Version
 import com.iiitnr.inventoryapp.data.api.ApiClient
 import com.iiitnr.inventoryapp.data.api.AuthEvent
@@ -26,6 +29,8 @@ import com.iiitnr.inventoryapp.data.api.AuthEventManager
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.ui.screens.AuditLogScreen
 import com.iiitnr.inventoryapp.ui.screens.ComponentsScreen
+import com.iiitnr.inventoryapp.ui.screens.FinesAdminScreen
+import com.iiitnr.inventoryapp.ui.screens.FinesAdminStudentDetailScreen
 import com.iiitnr.inventoryapp.ui.screens.FinesScreen
 import com.iiitnr.inventoryapp.ui.screens.LoginScreen
 import com.iiitnr.inventoryapp.ui.screens.NotificationsScreen
@@ -144,12 +149,31 @@ fun App(
                                 onNavigateToFines = {
                                     navController.navigate("fines")
                                 },
+                                onNavigateToFinesAdmin = {
+                                    navController.navigate("fines_admin")
+                                },
                                 onExportCsv = onExportComponentsCsv,
                                 onImportCsv = onImportComponentsCsv,
                             )
                         }
                         composable("fines") {
                             FinesScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                            )
+                        }
+                        composable("fines_admin") {
+                            FinesAdminScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onStudentClick = { userId -> navController.navigate("fines_admin/$userId") },
+                            )
+                        }
+                        composable(
+                            route = "fines_admin/{userId}",
+                            arguments = listOf(navArgument("userId") { type = NavType.StringType }),
+                        ) { backStackEntry ->
+                            val userId = backStackEntry.arguments?.read { getString("userId") }.orEmpty()
+                            FinesAdminStudentDetailScreen(
+                                userId = userId,
                                 onNavigateBack = { navController.popBackStack() },
                             )
                         }

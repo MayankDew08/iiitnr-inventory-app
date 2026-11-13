@@ -4,6 +4,8 @@ import com.iiitnr.inventoryapp.data.api.ApiClient
 import com.iiitnr.inventoryapp.ui.screens.AuditLogViewModel
 import com.iiitnr.inventoryapp.ui.screens.AuthViewModel
 import com.iiitnr.inventoryapp.ui.screens.ComponentsViewModel
+import com.iiitnr.inventoryapp.ui.screens.FinesAdminStudentDetailViewModel
+import com.iiitnr.inventoryapp.ui.screens.FinesAdminViewModel
 import com.iiitnr.inventoryapp.ui.screens.FinesViewModel
 import com.iiitnr.inventoryapp.ui.screens.NotificationsViewModel
 import com.iiitnr.inventoryapp.ui.screens.ProfileViewModel
@@ -34,6 +36,8 @@ val viewModelModule =
     module {
         viewModel { RequestsViewModel(get()) }
         viewModel { FinesViewModel(get()) }
+        viewModel { FinesAdminViewModel(get()) }
+        viewModel { FinesAdminStudentDetailViewModel(get()) }
         viewModel { ComponentsViewModel(get(), getOrNull(), getOrNull()) }
         viewModel { AuthViewModel(get()) }
         viewModel { ProfileViewModel(get()) }
