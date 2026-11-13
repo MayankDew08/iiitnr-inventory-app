@@ -27,6 +27,9 @@ class FinesAdminStudentDetailViewModel(
 
     val total: Int get() = fines.sumOf { it.lateFeeAccrued }
 
+    // Broad catch is deliberate: toAppError() classifies every failure
+    // (HTTP, network, serialization) centrally, matching RequestsViewModel.
+    @Suppress("TooGenericExceptionCaught")
     fun load(userId: String) {
         if (isLoading) return
 

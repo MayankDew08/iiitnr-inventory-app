@@ -36,6 +36,9 @@ class FinesAdminViewModel(
         load()
     }
 
+    // Broad catch is deliberate: toAppError() classifies every failure
+    // (HTTP, network, serialization) centrally, matching RequestsViewModel.
+    @Suppress("TooGenericExceptionCaught")
     fun load() {
         if (isLoading) return
 

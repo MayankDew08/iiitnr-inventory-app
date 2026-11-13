@@ -220,7 +220,7 @@ private fun adminDaysLateLabel(
     val dueDate =
         try {
             returnDueAt?.let { LocalDateTime.parse(it.replace(' ', 'T')).date }
-        } catch (e: Exception) {
+        } catch (e: IllegalArgumentException) {
             null
         } ?: return "Overdue"
 
