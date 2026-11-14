@@ -10,7 +10,6 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -27,9 +26,7 @@ class ComponentApiService(
     suspend fun getComponents(token: String): ComponentsResponse {
         val response =
             client.get("$baseUrl/components") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }
         if (response.status == HttpStatusCode.NoContent) {
             return ComponentsResponse(components = emptyList())
@@ -43,9 +40,7 @@ class ComponentApiService(
     ): ComponentResponse =
         client
             .post("$baseUrl/components") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }.body()
@@ -56,9 +51,7 @@ class ComponentApiService(
     ): BulkImportResponse =
         client
             .post("$baseUrl/components/import/csv") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType("text", "csv"))
                 setBody(csv)
             }.body()
@@ -70,9 +63,7 @@ class ComponentApiService(
     ): ComponentResponse =
         client
             .put("$baseUrl/components/$id") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }.body()
@@ -82,9 +73,7 @@ class ComponentApiService(
         id: String,
     ) {
         client.delete("$baseUrl/components/$id") {
-            headers {
-                append(HttpHeaders.Authorization, token)
-            }
+            bearer(token)
         }
     }
 
@@ -119,9 +108,7 @@ class ComponentApiService(
                         )
                     },
             ) {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }.body()
 
     suspend fun deleteImage(
@@ -130,8 +117,6 @@ class ComponentApiService(
     ): ComponentResponse =
         client
             .delete("$baseUrl/components/$componentId/image") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }.body()
 }

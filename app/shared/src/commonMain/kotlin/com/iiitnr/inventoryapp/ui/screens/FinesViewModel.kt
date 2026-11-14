@@ -5,16 +5,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.api.RequestApiService
 import com.iiitnr.inventoryapp.data.models.AppError
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class FinesViewModel(
     private val tokenManager: TokenManager,
+    private val requestApiService: RequestApiService,
 ) : ViewModel() {
     var fines: List<Request> by mutableStateOf(emptyList())
         private set
@@ -38,12 +40,13 @@ class FinesViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.requestApiService.getRequests("Bearer $token")
+                    val response = requestApiService.getRequests(token)
                     fines = response.requests.filter { it.lateFeeAccrued > 0 && it.returnedAt == null }
                 } else {
                     errorMessage = "No authentication token"
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 handleLoadError(e)
             } finally {
                 isLoading = false

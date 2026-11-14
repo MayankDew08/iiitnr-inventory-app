@@ -7,10 +7,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.sse.sse
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.put
-import io.ktor.http.HttpHeaders
 import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -28,14 +26,14 @@ class NotificationApiService(
     ): NotificationsResponse =
         client
             .get("$baseUrl/notifications") {
-                headers { append(HttpHeaders.Authorization, token) }
+                bearer(token)
                 parameter("limit", limit)
             }.body()
 
     suspend fun getUnreadCount(token: String): UnreadCountResponse =
         client
             .get("$baseUrl/notifications/unread-count") {
-                headers { append(HttpHeaders.Authorization, token) }
+                bearer(token)
             }.body()
 
     suspend fun markRead(
@@ -43,20 +41,20 @@ class NotificationApiService(
         id: String,
     ) {
         client.put("$baseUrl/notifications/$id/read") {
-            headers { append(HttpHeaders.Authorization, token) }
+            bearer(token)
         }
     }
 
     suspend fun markAllRead(token: String) {
         client.put("$baseUrl/notifications/read-all") {
-            headers { append(HttpHeaders.Authorization, token) }
+            bearer(token)
         }
     }
 
     fun streamNotifications(token: String): Flow<AppNotification> =
         flow {
             client.sse("$baseUrl/notifications/events", {
-                headers { append(HttpHeaders.Authorization, token) }
+                bearer(token)
             }) {
                 incoming.collect { event: ServerSentEvent ->
                     val data = event.data ?: return@collect

@@ -1,2 +1,102 @@
 <?xml version="1.0" ?>
-<SmellBaseline />
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>CognitiveComplexMethod:CameraCapture.android.kt:@Composable actual fun CameraCaptureContent</ID>
+    <ID>LongMethod:CameraCapture.android.kt:@Composable actual fun CameraCaptureContent</ID>
+    <ID>LongMethod:QrScanner.android.kt:@Composable actual fun QrScannerContent</ID>
+    <ID>ReturnCount:ImagePicker.android.kt:actual suspend fun pickImage: ImageResult?</ID>
+    <ID>ReturnCount:ImagePicker.android.kt:private fun queryContentDisplayName: String?</ID>
+    <ID>TooGenericExceptionCaught:GoogleSignInHelper.android.kt:GoogleSignInHelper$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ImagePicker.android.kt:e: Exception</ID>
+    <ID>CognitiveComplexMethod:App.kt:@Composable fun App</ID>
+    <ID>CognitiveComplexMethod:AuditLogScreen.kt:@Composable private fun AuditDetailDialog</ID>
+    <ID>CognitiveComplexMethod:ComponentCard.kt:@Composable fun ComponentCard</ID>
+    <ID>CognitiveComplexMethod:ComponentDialog.kt:@Composable fun ComponentDialog</ID>
+    <ID>CognitiveComplexMethod:ComponentsScreen.kt:@Composable fun ComponentsScreen</ID>
+    <ID>CognitiveComplexMethod:ComponentsTopBar.kt:@Composable fun ComponentsTopBar</ID>
+    <ID>CognitiveComplexMethod:ComponentsViewModel.kt:ComponentsViewModel$fun loadComponents</ID>
+    <ID>CognitiveComplexMethod:FulfillByIdDialog.kt:@Composable fun FulfillByIdDialog</ID>
+    <ID>CognitiveComplexMethod:LoginScreen.kt:@Composable fun LoginScreen</ID>
+    <ID>CognitiveComplexMethod:RequestDetailDialog.kt:@Composable fun RequestDetailDialogContent</ID>
+    <ID>CognitiveComplexMethod:RequestQrDialog.kt:@Composable fun RequestQrDialog</ID>
+    <ID>CognitiveComplexMethod:RequestsScreen.kt:@Composable fun RequestsScreen</ID>
+    <ID>CognitiveComplexMethod:RequestsScreen.kt:@Composable private fun RequestsScreenScaffold</ID>
+    <ID>CognitiveComplexMethod:UserManagementScreen.kt:@Composable private fun UserCard</ID>
+    <ID>CyclomaticComplexMethod:ComponentDialog.kt:@Composable fun ComponentDialog</ID>
+    <ID>CyclomaticComplexMethod:ComponentsScreen.kt:@Composable fun ComponentsScreen</ID>
+    <ID>CyclomaticComplexMethod:ErrorMapping.kt:suspend fun Throwable.toAppError: AppError</ID>
+    <ID>CyclomaticComplexMethod:RequestDetailDialog.kt:@Composable fun RequestDetailDialogContent</ID>
+    <ID>CyclomaticComplexMethod:RequestsScreen.kt:@Composable fun RequestsScreen</ID>
+    <ID>FunctionNaming:Drawable0.commonMain.kt:@InternalResourceApi internal fun _collectCommonMainDrawable0Resources</ID>
+    <ID>LongMethod:App.kt:@Composable fun App</ID>
+    <ID>LongMethod:AuditLogScreen.kt:@Composable private fun AuditDetailDialog</ID>
+    <ID>LongMethod:AuditLogScreen.kt:@Composable private fun AuditLogCard</ID>
+    <ID>LongMethod:AuditLogScreen.kt:@Composable private fun DiffViewer</ID>
+    <ID>LongMethod:AuditLogScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun AuditLogScreen</ID>
+    <ID>LongMethod:CartDialog.kt:@Composable fun CartDialog</ID>
+    <ID>LongMethod:ComponentCard.kt:@Composable fun ComponentCard</ID>
+    <ID>LongMethod:ComponentDialog.kt:@Composable fun ComponentDialog</ID>
+    <ID>LongMethod:ComponentDialog.kt:@Composable private fun ComponentDialogFields</ID>
+    <ID>LongMethod:ComponentsScreen.kt:@Composable fun ComponentsScreen</ID>
+    <ID>LongMethod:ComponentsTopBar.kt:@Composable fun ComponentsTopBar</ID>
+    <ID>LongMethod:FinesScreen.kt:@Composable private fun FinesContent</ID>
+    <ID>LongMethod:FulfillByIdDialog.kt:@Composable fun FulfillByIdDialog</ID>
+    <ID>LongMethod:LoginScreen.kt:@Composable fun LoginScreen</ID>
+    <ID>LongMethod:ProfileScreen.kt:@Composable fun ProfileScreen</ID>
+    <ID>LongMethod:RegisterScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun RegisterScreen</ID>
+    <ID>LongMethod:RequestCard.kt:@Preview @Composable fun RequestCardPreview</ID>
+    <ID>LongMethod:RequestDetailDialog.kt:@Composable fun RequestDetailDialogContent</ID>
+    <ID>LongMethod:RequestDetailDialog.kt:@Composable private fun RequestDetailDatesFlow</ID>
+    <ID>LongMethod:RequestDetailDialog.kt:@Preview @Composable fun RequestDetailDialogContentPreview</ID>
+    <ID>LongMethod:RequestQrDialog.kt:@Composable fun RequestQrDialog</ID>
+    <ID>LongMethod:RequestsScreen.kt:@Composable fun PartialIssueDialogContent</ID>
+    <ID>LongMethod:RequestsScreen.kt:@Composable fun PartialReturnDialogContent</ID>
+    <ID>LongMethod:RequestsScreen.kt:@Composable fun RequestsScreen</ID>
+    <ID>LongMethod:RequestsScreen.kt:@Composable private fun RequestsDialogs</ID>
+    <ID>LongMethod:RequestsScreen.kt:@Composable private fun RequestsScreenScaffold</ID>
+    <ID>LongMethod:UserManagementScreen.kt:@Composable private fun UserCard</ID>
+    <ID>LongMethod:UserManagementScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun UserManagementScreen</ID>
+    <ID>LongMethod:UserManagementScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable private fun EditUserDialog</ID>
+    <ID>MatchingDeclarationName:InventoryTable.kt:TableColumn&lt;T&gt;</ID>
+    <ID>MatchingDeclarationName:Theme.kt:InventoryColors</ID>
+    <ID>MaxLineLength:AppDatabaseQueries.kt:AppDatabaseQueries$)</ID>
+    <ID>MaxLineLength:AppDatabaseQueries.kt:AppDatabaseQueries$public</ID>
+    <ID>MaxLineLength:AppDatabaseQueries.kt:AppDatabaseQueries$public fun selectDraftItemsWithAvailability: Query&lt;SelectDraftItemsWithAvailability&gt;</ID>
+    <ID>MaxLineLength:AppDatabaseQueries.kt:AppDatabaseQueries$val</ID>
+    <ID>MaxLineLength:AppDatabaseQueries.kt:AppDatabaseQueries.SelectDraftQuery$override</ID>
+    <ID>MaxLineLength:Res.kt:Res$public suspend</ID>
+    <ID>ReturnCount:ComponentsViewModel.kt:ComponentsViewModel$private fun persistDraft</ID>
+    <ID>ReturnCount:ComponentsViewModel.kt:ComponentsViewModel$private suspend fun restoreDraft</ID>
+    <ID>ReturnCount:DateTimeUtils.kt:fun formatDisplayDate: String</ID>
+    <ID>ReturnCount:DateTimeUtils.kt:fun getRelativeDays: String</ID>
+    <ID>ReturnCount:DateTimeUtils.kt:fun isOverdue: Boolean</ID>
+    <ID>ReturnCount:RequestsViewModel.kt:RequestsViewModel$fun handleQrResult: Request?</ID>
+    <ID>ReturnCount:Version.kt:Version$fun isVersionNewer: Boolean</ID>
+    <ID>SwallowedException:DateTimeUtils.kt:e: IllegalArgumentException</ID>
+    <ID>SwallowedException:FinesScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:App.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AuditLogViewModel.kt:AuditLogViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:AuthViewModel.kt:AuthViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ComponentsViewModel.kt:ComponentsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FinesScreen.kt:e: Exception</ID>
+    <ID>TooGenericExceptionCaught:FinesViewModel.kt:FinesViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:NotificationsViewModel.kt:NotificationsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:ProfileViewModel.kt:ProfileViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:RequestsViewModel.kt:RequestsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:UserManagementViewModel.kt:UserManagementViewModel$e: Exception</ID>
+    <ID>TooManyFunctions:AppDatabaseQueries.kt:AppDatabaseQueries : TransacterImpl</ID>
+    <ID>TooManyFunctions:ComponentsViewModel.kt:ComponentsViewModel : ViewModel</ID>
+    <ID>ConstructorParameterNaming:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper.TokenResponse$val access_token: String? = null</ID>
+    <ID>ConstructorParameterNaming:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper.TokenResponse$val expires_in: Long? = null</ID>
+    <ID>ConstructorParameterNaming:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper.TokenResponse$val id_token: String? = null</ID>
+    <ID>ConstructorParameterNaming:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper.TokenResponse$val refresh_token: String? = null</ID>
+    <ID>ConstructorParameterNaming:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper.TokenResponse$val token_type: String? = null</ID>
+    <ID>MatchingDeclarationName:TokenManager.jvm.kt:DesktopTokenManager : TokenManager</ID>
+    <ID>TooGenericExceptionCaught:GoogleDesktopSignInHelper.kt:GoogleDesktopSignInHelper$e: Exception</ID>
+    <ID>MatchingDeclarationName:DriverFactory.wasmJs.kt:DriverFactory</ID>
+    <ID>MatchingDeclarationName:TokenManager.wasmJs.kt:WasmTokenManager : TokenManager</ID>
+    <ID>TooGenericExceptionCaught:GoogleWebSignInHelper.kt:GoogleWebSignInHelper$t: Throwable</ID>
+    <ID>UnusedParameter:GoogleWebSignInHelper.kt:message: String</ID>
+  </CurrentIssues>
+</SmellBaseline>

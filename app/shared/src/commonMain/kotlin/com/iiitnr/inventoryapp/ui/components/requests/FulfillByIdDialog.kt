@@ -55,7 +55,7 @@ fun FulfillByIdDialog(
                     }
                 } else {
                     Text(
-                        text = "Enter 4-digit OTP or Request ID:",
+                        text = "Enter the 4-digit OTP or Request ID:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -65,7 +65,8 @@ fun FulfillByIdDialog(
                     value = requestIdInput,
                     onValueChange = { newValue ->
                         onRequestIdChange(newValue)
-                        if (newValue.trim().length == 4) {
+                        val trimmed = newValue.trim()
+                        if (trimmed.length == 4 && trimmed.all { it.isDigit() }) {
                             onConfirm()
                         }
                     },

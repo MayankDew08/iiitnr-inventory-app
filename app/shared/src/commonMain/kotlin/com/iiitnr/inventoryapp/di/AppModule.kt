@@ -32,14 +32,14 @@ val storageModule =
 
 val viewModelModule =
     module {
-        viewModel { RequestsViewModel(get()) }
-        viewModel { FinesViewModel(get()) }
-        viewModel { ComponentsViewModel(get(), getOrNull(), getOrNull()) }
-        viewModel { AuthViewModel(get()) }
-        viewModel { ProfileViewModel(get()) }
-        viewModel { AuditLogViewModel(get()) }
+        viewModel { RequestsViewModel(get(), get(), get()) }
+        viewModel { FinesViewModel(get(), get()) }
+        viewModel { ComponentsViewModel(get(), get(), get(), get(), getOrNull(), getOrNull()) }
+        viewModel { AuthViewModel(get(), get()) }
+        viewModel { ProfileViewModel(get(), get()) }
+        viewModel { AuditLogViewModel(get(), get()) }
         viewModel { NotificationsViewModel(get(), get()) }
-        viewModel { UserManagementViewModel(get()) }
+        viewModel { UserManagementViewModel(get(), get()) }
     }
 
 expect val platformModule: Module

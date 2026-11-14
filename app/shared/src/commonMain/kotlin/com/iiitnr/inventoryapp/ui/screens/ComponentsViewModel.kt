@@ -5,7 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.api.AuthApiService
+import com.iiitnr.inventoryapp.data.api.ComponentApiService
+import com.iiitnr.inventoryapp.data.api.RequestApiService
 import com.iiitnr.inventoryapp.data.cache.ComponentsCache
 import com.iiitnr.inventoryapp.data.cache.DraftCache
 import com.iiitnr.inventoryapp.data.models.AppError
@@ -17,6 +19,7 @@ import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -26,6 +29,9 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class ComponentsViewModel(
     val tokenManager: TokenManager,
+    private val authApiService: AuthApiService,
+    private val componentApiService: ComponentApiService,
+    private val requestApiService: RequestApiService,
     private val componentsCache: ComponentsCache? = null,
     private val draftCache: DraftCache? = null,
 ) : ViewModel() {
@@ -153,12 +159,13 @@ class ComponentsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.authApiService.getMe("Bearer $token")
+                    val response = authApiService.getMe(token)
                     userRole = response.user.role
                     currentUserId = response.user.id
                     restoreDraft()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             }
         }
     }
@@ -201,7 +208,8 @@ class ComponentsViewModel(
                     targetFacultyId = _selectedFacultyId,
                 )
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
         } finally {
             isRestoringDraft = false
         }
@@ -220,7 +228,8 @@ class ComponentsViewModel(
                     projectTitle = _projectTitle,
                     targetFacultyId = _selectedFacultyId,
                 )
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             }
         }
     }
@@ -243,7 +252,7 @@ class ComponentsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.componentApiService.getComponents("Bearer $token")
+                    val response = componentApiService.getComponents(token)
                     if (componentsCache != null) {
                         componentsCache.save(response.components, null)
                     } else {
@@ -251,7 +260,8 @@ class ComponentsViewModel(
                     }
                     errorMessage = null
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 reportComponentLoadFailure(e, pollingMode)
             } finally {
                 if (pollingMode) {
@@ -286,10 +296,11 @@ class ComponentsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.requestApiService.getFaculty("Bearer $token")
+                    val response = requestApiService.getFaculty(token)
                     facultyOptions = response.faculty
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             } finally {
                 isLoadingFaculty = false
             }
@@ -331,7 +342,8 @@ class ComponentsViewModel(
         viewModelScope.launch {
             try {
                 cache.clear(userId)
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             }
         }
     }
@@ -359,8 +371,8 @@ class ComponentsViewModel(
                         cartQuantities.map { (id, qty) ->
                             RequestItemPayload(componentId = id, quantity = qty)
                         }
-                    ApiClient.requestApiService.createRequest(
-                        token = "Bearer $token",
+                    requestApiService.createRequest(
+                        token = token,
                         payload =
                             CreateRequestPayload(
                                 items = items,
@@ -373,7 +385,8 @@ class ComponentsViewModel(
                     _snackbarMessages.emit("Request submitted successfully")
                     loadComponents(pollingMode = true)
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 cartError = "Failed to submit request: ${e.toAppError().message}"
             } finally {
                 isSubmittingRequest = false
@@ -386,11 +399,12 @@ class ComponentsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    ApiClient.componentApiService.deleteComponent("Bearer $token", component.id)
+                    componentApiService.deleteComponent(token, component.id)
                     loadComponents(pollingMode = true)
                     _snackbarMessages.emit("Component deleted successfully")
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _snackbarMessages.emit("Failed to delete component: ${e.toAppError().message}")
             } finally {
                 showDeleteDialog = null
@@ -407,14 +421,14 @@ class ComponentsViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     if (editingComponent != null) {
-                        ApiClient.componentApiService.updateComponent(
-                            "Bearer $token",
+                        componentApiService.updateComponent(
+                            token,
                             editingComponent!!.id,
                             request,
                         )
                     } else {
-                        ApiClient.componentApiService.createComponent(
-                            "Bearer $token",
+                        componentApiService.createComponent(
+                            token,
                             request,
                         )
                     }
@@ -422,7 +436,8 @@ class ComponentsViewModel(
                     editingComponent = null
                     loadComponents()
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _snackbarMessages.emit("Failed to save component: ${e.toAppError().message}")
             }
         }
@@ -439,14 +454,15 @@ class ComponentsViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response =
-                        ApiClient.componentApiService.importComponentsCsv(
-                            "Bearer $token",
+                        componentApiService.importComponentsCsv(
+                            token,
                             csvContent,
                         )
                     loadComponents(pollingMode = true)
                     _snackbarMessages.emit("Imported ${response.imported} component(s) successfully")
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _snackbarMessages.emit("Failed to import components: ${e.toAppError().message}")
             } finally {
                 isImportingCsv = false
@@ -465,8 +481,8 @@ class ComponentsViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response =
-                        ApiClient.componentApiService.uploadImage(
-                            "Bearer $token",
+                        componentApiService.uploadImage(
+                            token,
                             componentId,
                             bytes,
                             filename,
@@ -475,7 +491,8 @@ class ComponentsViewModel(
                     loadComponents(pollingMode = true)
                     _snackbarMessages.emit("Image uploaded successfully")
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _snackbarMessages.emit("Failed to upload image: ${e.toAppError().message}")
             } finally {
                 isUploadingImage = false
@@ -489,11 +506,12 @@ class ComponentsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    ApiClient.componentApiService.deleteImage("Bearer $token", componentId)
+                    componentApiService.deleteImage(token, componentId)
                     loadComponents()
                     _snackbarMessages.emit("Image removed successfully")
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 _snackbarMessages.emit("Failed to remove image: ${e.toAppError().message}")
             }
         }

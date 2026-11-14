@@ -6,6 +6,7 @@ import io.ktor.client.request.forms.submitForm
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.Parameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import java.awt.Desktop
 import java.net.InetSocketAddress
@@ -32,7 +33,8 @@ class GoogleDesktopSignInHelper(
             val (server, codeDeferred) =
                 try {
                     startLocalServerForCode()
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     println("Failed to start local OAuth callback server: ${e.message}")
                     return@run null
                 }

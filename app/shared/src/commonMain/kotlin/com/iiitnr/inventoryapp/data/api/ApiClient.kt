@@ -11,7 +11,9 @@ import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.sse.SSE
+import io.ktor.client.request.HttpRequest
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -56,11 +58,11 @@ object ApiClient {
 
             expectSuccess = true
             HttpResponseValidator {
-                handleResponseExceptionWithRequest { exception, _ ->
+                handleResponseExceptionWithRequest { exception, request ->
                     if (exception !is ResponseException) return@handleResponseExceptionWithRequest
 
                     val response = exception.response
-                    if (response.status == HttpStatusCode.Unauthorized) {
+                    if (response.status == HttpStatusCode.Unauthorized && isSessionExpiry(request)) {
                         AuthEventManager.emit(AuthEvent.Unauthorized)
                     }
 
@@ -76,6 +78,12 @@ object ApiClient {
                 }
             }
         }
+
+    private fun isSessionExpiry(request: HttpRequest): Boolean {
+        val carriesToken = request.headers[HttpHeaders.Authorization] != null
+        val isAuthEndpoint = request.url.encodedPath.contains("/auth/")
+        return carriesToken && !isAuthEndpoint
+    }
 
     val authApiService: AuthApiService = AuthApiService(client, BASE_URL)
     val componentApiService: ComponentApiService = ComponentApiService(client, BASE_URL)

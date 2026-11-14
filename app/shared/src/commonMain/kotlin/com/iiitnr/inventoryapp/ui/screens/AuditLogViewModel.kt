@@ -5,14 +5,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.api.AuditLogApiService
 import com.iiitnr.inventoryapp.data.models.AuditLogEntry
 import com.iiitnr.inventoryapp.data.storage.TokenManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class AuditLogViewModel(
     private val tokenManager: TokenManager,
+    private val auditLogApiService: AuditLogApiService,
 ) : ViewModel() {
     var logs by mutableStateOf<List<AuditLogEntry>>(emptyList())
         private set
@@ -41,8 +43,8 @@ class AuditLogViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response =
-                        ApiClient.auditLogApiService.getAuditLogs(
-                            token = "Bearer $token",
+                        auditLogApiService.getAuditLogs(
+                            token = token,
                             limit = pageSize,
                             offset = currentOffset,
                             action = selectedAction,
@@ -51,7 +53,8 @@ class AuditLogViewModel(
                     totalCount = response.pagination.total
                     errorMessage = null
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 if (logs.isEmpty()) {
                     errorMessage = "Failed to load audit logs: ${e.message}"
                 }

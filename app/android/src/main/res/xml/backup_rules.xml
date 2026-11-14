@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
+   Backups must never carry the auth token. `auth_preferences` holds the bearer token
+   (encrypted with an AndroidKeyStore key that does not leave the device, so a restored
+   copy would be useless anyway) and nothing here is worth restoring across devices.
    See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
+   Note: ignored on API 31+, which uses data_extraction_rules.xml instead.
 -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <exclude domain="file" path="datastore/" />
 </full-backup-content>

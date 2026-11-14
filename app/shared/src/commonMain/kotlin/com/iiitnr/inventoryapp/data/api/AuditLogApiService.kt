@@ -4,9 +4,7 @@ import com.iiitnr.inventoryapp.data.models.AuditLogsResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
-import io.ktor.http.HttpHeaders
 
 class AuditLogApiService(
     private val client: HttpClient,
@@ -22,9 +20,7 @@ class AuditLogApiService(
     ): AuditLogsResponse =
         client
             .get("$baseUrl/admin/audit-logs") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 parameter("limit", limit)
                 parameter("offset", offset)
                 if (!userId.isNullOrBlank()) parameter("userId", userId)

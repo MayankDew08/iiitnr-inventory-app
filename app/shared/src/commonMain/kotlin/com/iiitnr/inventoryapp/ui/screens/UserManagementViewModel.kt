@@ -5,11 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.api.UserApiService
 import com.iiitnr.inventoryapp.data.models.UpdateUserRequest
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -17,6 +18,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 class UserManagementViewModel(
     private val tokenManager: TokenManager,
+    private val userApiService: UserApiService,
 ) : ViewModel() {
     var users by mutableStateOf<List<User>>(emptyList())
         private set
@@ -45,8 +47,8 @@ class UserManagementViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response =
-                        ApiClient.userApiService.getUsers(
-                            token = "Bearer $token",
+                        userApiService.getUsers(
+                            token = token,
                             limit = pageSize,
                             offset = currentOffset,
                             search = searchQuery.trim().ifBlank { null },
@@ -55,7 +57,8 @@ class UserManagementViewModel(
                     totalCount = response.pagination.total
                     errorMessage = null
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 val errorMsg = e.toAppError().message
                 if (users.isEmpty()) {
                     errorMessage = errorMsg
@@ -93,10 +96,11 @@ class UserManagementViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    ApiClient.userApiService.updateUser("Bearer $token", userId, request)
+                    userApiService.updateUser(token, userId, request)
                     loadUsers()
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errorMessage = "Failed to update user: ${e.toAppError().message}"
             }
         }

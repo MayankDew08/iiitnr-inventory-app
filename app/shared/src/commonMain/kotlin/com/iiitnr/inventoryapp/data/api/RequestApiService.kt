@@ -11,13 +11,11 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.sse.sse
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import kotlinx.coroutines.flow.Flow
@@ -33,9 +31,7 @@ class RequestApiService(
     ): RequestResponse =
         client
             .post("$baseUrl/requests") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType.Application.Json)
                 setBody(payload)
             }.body()
@@ -46,9 +42,7 @@ class RequestApiService(
     ): RequestsResponse {
         val response =
             client.get("$baseUrl/requests") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 if (status != null) {
                     parameter("status", status)
                 }
@@ -65,9 +59,7 @@ class RequestApiService(
     ): RequestResponse =
         client
             .get("$baseUrl/requests/${query.trim()}") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }.body()
 
     suspend fun generateRequestOtp(
@@ -76,9 +68,7 @@ class RequestApiService(
     ): RequestOtpResponse =
         client
             .post("$baseUrl/requests/$requestId/otp") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }.body()
 
     suspend fun updateRequestStatus(
@@ -88,9 +78,7 @@ class RequestApiService(
     ): RequestResponse =
         client
             .put("$baseUrl/requests/$id") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType.Application.Json)
                 setBody(payload)
             }.body()
@@ -98,9 +86,7 @@ class RequestApiService(
     suspend fun exportRequestsCsv(token: String): String {
         val response =
             client.get("$baseUrl/requests/export/csv") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }
         return response.body()
     }
@@ -110,18 +96,14 @@ class RequestApiService(
         id: String,
     ) {
         client.delete("$baseUrl/requests/$id") {
-            headers {
-                append(HttpHeaders.Authorization, token)
-            }
+            bearer(token)
         }
     }
 
     suspend fun getFaculty(token: String): FacultyResponse {
         val response =
             client.get("$baseUrl/faculty") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }
         if (response.status == HttpStatusCode.NoContent) {
             return FacultyResponse(faculty = emptyList())
@@ -132,9 +114,7 @@ class RequestApiService(
     fun streamRequestEvents(token: String): Flow<Unit> =
         flow {
             client.sse("$baseUrl/requests/events", {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
             }) {
                 incoming.collect {
                     emit(Unit)

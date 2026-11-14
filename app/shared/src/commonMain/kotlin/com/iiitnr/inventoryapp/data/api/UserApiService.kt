@@ -8,12 +8,10 @@ import com.iiitnr.inventoryapp.data.models.UsersResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
-import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.patch
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 
@@ -29,9 +27,7 @@ class UserApiService(
     ): UsersResponse {
         val response =
             client.get("$baseUrl/admin/users") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 parameter("limit", limit)
                 parameter("offset", offset)
                 if (!search.isNullOrBlank()) parameter("search", search)
@@ -52,9 +48,7 @@ class UserApiService(
     ): User =
         client
             .patch("$baseUrl/admin/users/$userId") {
-                headers {
-                    append(HttpHeaders.Authorization, token)
-                }
+                bearer(token)
                 contentType(ContentType.Application.Json)
                 setBody(request)
             }.body<UserResponse>()

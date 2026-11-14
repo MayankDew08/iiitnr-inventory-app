@@ -21,12 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -83,7 +81,6 @@ fun RequestsScreen(
     var showRequestIdDialog by remember { mutableStateOf(false) }
     var showQrScanner by remember { mutableStateOf(false) }
     var requestIdInput by remember { mutableStateOf("") }
-    var pendingActionSelectionRequest by remember { mutableStateOf<Request?>(null) }
     var pendingPartialIssueRequest by remember { mutableStateOf<Request?>(null) }
     var issueItemsInput by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     var pendingPartialReturnRequest by remember { mutableStateOf<Request?>(null) }
@@ -103,37 +100,44 @@ fun RequestsScreen(
     val canExportCsv = viewModel.canExportCsv
 
     fun exportRequestsCsv() {
-        if (!canExportCsv || onExportCsv == null || requests.isEmpty()) return
-        val csvContent = viewModel.exportRequestsCsv() ?: return
-        val success = onExportCsv.invoke(csvContent)
-        scope.launch {
-            snackbarHostState.showSnackbar(
-                message =
-                    if (success) {
-                        "Exported requests.csv successfully"
-                    } else {
-                        "Failed to export requests.csv"
-                    },
-            )
+        val export = onExportCsv
+        if (!canExportCsv || export == null || requests.isEmpty()) return
+        viewModel.exportRequestsCsv { csvContent ->
+            val success = csvContent != null && export(csvContent)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message =
+                        if (success) {
+                            "Exported requests.csv successfully"
+                        } else {
+                            "Failed to export requests.csv"
+                        },
+                )
+            }
         }
     }
 
     fun updateRequestStatusPartialIssue(request: Request) {
         pendingPartialIssueRequest = request
         issueItemsInput =
-            request.items.associate { item ->
-                val componentId = item.componentId ?: ""
-                componentId to (item.quantity - item.fulfilledQuantity).coerceAtLeast(0)
-            }
+            request.items
+                .mapNotNull { item ->
+                    item.componentId?.let { componentId ->
+                        componentId to (item.quantity - item.fulfilledQuantity).coerceAtLeast(0)
+                    }
+                }.toMap()
     }
 
     fun updateRequestStatusPartialReturn(request: Request) {
         pendingPartialReturnRequest = request
         returnItemsInput =
-            request.items.filter { it.fulfilledQuantity > it.returnedQuantity }.associate { item ->
-                val componentId = item.componentId ?: ""
-                componentId to 0
-            }
+            request.items
+                .filter { it.fulfilledQuantity > it.returnedQuantity }
+                .mapNotNull { item ->
+                    item.componentId?.let { componentId ->
+                        componentId to (item.fulfilledQuantity - item.returnedQuantity).coerceAtLeast(0)
+                    }
+                }.toMap()
     }
 
     fun confirmPartialIssue() {
@@ -260,23 +264,6 @@ fun RequestsScreen(
                 }
             },
         )
-
-        pendingActionSelectionRequest?.let { request ->
-            RequestActionSelectionDialog(
-                request = request,
-                onIssueMore = {
-                    pendingActionSelectionRequest = null
-                    updateRequestStatusPartialIssue(request)
-                },
-                onCollectReturn = {
-                    pendingActionSelectionRequest = null
-                    updateRequestStatusPartialReturn(request)
-                },
-                onDismiss = {
-                    pendingActionSelectionRequest = null
-                },
-            )
-        }
 
         RequestsScreenScaffold(
             onNavigateBack = onNavigateBack,
@@ -953,58 +940,6 @@ fun PartialReturnDialogContent(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun RequestActionSelectionDialog(
-    request: Request,
-    onIssueMore: () -> Unit,
-    onCollectReturn: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Select Action") },
-        text = {
-            RequestActionSelectionDialogContent(request = request)
-        },
-        confirmButton = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Button(
-                    onClick = onIssueMore,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Issue More Items")
-                }
-                OutlinedButton(
-                    onClick = onCollectReturn,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Collect Return")
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
-    )
-}
-
-@Composable
-fun RequestActionSelectionDialogContent(request: Request) {
-    Column {
-        Text(
-            text = "Request for: ${request.projectTitle}",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("This request is partially issued. What would you like to do?")
     }
 }
 

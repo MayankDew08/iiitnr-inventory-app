@@ -9,7 +9,9 @@ import com.iiitnr.inventoryapp.data.api.NotificationApiService
 import com.iiitnr.inventoryapp.data.models.AppNotification
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -36,11 +38,12 @@ class NotificationsViewModel(
         viewModelScope.launch {
             try {
                 val token = tokenManager.token.first() ?: return@launch
-                val response = notificationApiService.getNotifications("Bearer $token")
+                val response = notificationApiService.getNotifications(token)
                 notifications = response.notifications
                 unreadCount = response.unreadCount
                 errorMessage = null
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errorMessage = e.toAppError().message
             } finally {
                 isLoading = false
@@ -50,17 +53,24 @@ class NotificationsViewModel(
 
     private fun startNotificationStream() {
         viewModelScope.launch {
-            while (true) {
-                try {
-                    val token = tokenManager.token.first() ?: return@launch
-                    notificationApiService.streamNotifications("Bearer $token").collect { notification ->
-                        notifications = listOf(notification) + notifications
-                        unreadCount++
-                    }
-                    delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
-                } catch (_: Exception) {
-                    delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
+            tokenManager.token.collectLatest { token ->
+                if (token == null) return@collectLatest
+                streamNotifications(token)
+            }
+        }
+    }
+
+    private suspend fun streamNotifications(token: String) {
+        while (true) {
+            try {
+                notificationApiService.streamNotifications(token).collect { notification ->
+                    notifications = listOf(notification) + notifications
+                    unreadCount++
                 }
+                delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
             }
         }
     }
@@ -75,8 +85,9 @@ class NotificationsViewModel(
         viewModelScope.launch {
             try {
                 val token = tokenManager.token.first() ?: return@launch
-                notificationApiService.markRead("Bearer $token", notificationId)
-            } catch (_: Exception) {
+                notificationApiService.markRead(token, notificationId)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 loadNotifications()
             }
         }
@@ -91,8 +102,9 @@ class NotificationsViewModel(
         viewModelScope.launch {
             try {
                 val token = tokenManager.token.first() ?: return@launch
-                notificationApiService.markAllRead("Bearer $token")
-            } catch (_: Exception) {
+                notificationApiService.markAllRead(token)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 loadNotifications()
             }
         }
@@ -102,8 +114,9 @@ class NotificationsViewModel(
         viewModelScope.launch {
             try {
                 val token = tokenManager.token.first() ?: return@launch
-                unreadCount = notificationApiService.getUnreadCount("Bearer $token").unreadCount
-            } catch (_: Exception) {
+                unreadCount = notificationApiService.getUnreadCount(token).unreadCount
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             }
         }
     }

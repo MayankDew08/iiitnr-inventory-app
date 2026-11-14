@@ -1,4 +1,3 @@
-import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
@@ -12,12 +11,39 @@ plugins {
     alias(libs.plugins.sqldelight)
 }
 
-val packageJsonFile = rootProject.layout.projectDirectory.file("../backend/package.json")
+val versionFile = rootProject.layout.projectDirectory.file("../VERSION")
 val generatedVersionDir = layout.buildDirectory.dir("generated/source/appVersion/commonMain/kotlin")
 
 val isDebugBuild = (project.findProperty("appDebug") as String?)?.toBoolean() ?: false
+val devBaseUrlOverride = (project.findProperty("devBaseUrl") as String?)?.takeIf { it.isNotBlank() }
+val androidDevBaseUrl = devBaseUrlOverride ?: "http://10.0.2.2:4000"
+val generatedDevBaseUrlDir = layout.buildDirectory.dir("generated/source/devBaseUrl/androidMain/kotlin")
 val generatedBuildFlagsDir =
     layout.buildDirectory.dir("generated/source/buildFlags/commonMain/kotlin")
+
+val generateDevBaseUrlKt =
+    tasks.register("generateDevBaseUrlKt") {
+        description = "Generates Android dev base URL"
+        group = "build"
+        val url = androidDevBaseUrl
+        val outputDir = generatedDevBaseUrlDir.get().asFile
+        inputs.property("devBaseUrl", url)
+        outputs.dir(outputDir)
+        doLast {
+            val f = outputDir.resolve("com/iiitnr/inventoryapp/data/api/GeneratedDevBaseUrl.kt")
+            outputDir.deleteRecursively()
+            f.parentFile.mkdirs()
+            f.writeText(
+                """
+                package com.iiitnr.inventoryapp.data.api
+
+                internal object GeneratedDevBaseUrl {
+                    const val URL = "$url"
+                }
+                """.trimIndent() + "\n",
+            )
+        }
+    }
 
 val generateBuildFlagsKt =
     tasks.register("generateBuildFlagsKt") {
@@ -49,19 +75,16 @@ val generateVersionKt =
     tasks.register("generateVersionKt") {
         description = "Generates Version for the App"
         group = "build"
-        val versionInput = packageJsonFile.asFile
+        val versionInput = versionFile.asFile
         val versionOutputDir = generatedVersionDir.get().asFile
 
         inputs.file(versionInput)
         outputs.dir(versionOutputDir)
 
         doLast {
-            val packageJson = versionInput.readText()
             val version =
-                (JsonSlurper().parseText(packageJson) as Map<*, *>)["version"]
-                    ?.toString()
-                    ?.takeIf { it.isNotBlank() }
-                    ?: error("Could not find version in backend/package.json")
+                versionInput.readText().trim().takeIf { it.isNotBlank() }
+                    ?: error("VERSION file is empty")
             val versionFile =
                 versionOutputDir.resolve("com/iiitnr/inventoryapp/data/GeneratedVersion.kt")
 
@@ -166,6 +189,7 @@ kotlin {
 
         val androidMain =
             sourceSets.getByName("androidMain") {
+                kotlin.srcDir(generateDevBaseUrlKt)
                 dependencies {
                     api("io.insert-koin:koin-android:${libs.versions.koin.get()}")
                     implementation(libs.kotlinx.coroutines.android)
@@ -232,6 +256,15 @@ detekt {
     allRules = false
     config.setFrom(files("$rootDir/detekt.yml"))
     baseline = file("$rootDir/detekt-baseline.xml")
+}
+
+tasks.named("detekt") {
+    dependsOn(
+        "detektCommonMainSourceSet",
+        "detektAndroidMainSourceSet",
+        "detektJvmMainSourceSet",
+        "detektWasmJsMainSourceSet",
+    )
 }
 
 ktlint {

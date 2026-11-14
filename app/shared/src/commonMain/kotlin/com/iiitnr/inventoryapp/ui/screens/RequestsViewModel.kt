@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.data.api.AuthApiService
+import com.iiitnr.inventoryapp.data.api.RequestApiService
 import com.iiitnr.inventoryapp.data.models.AppError
+import com.iiitnr.inventoryapp.data.models.AppHttpException
 import com.iiitnr.inventoryapp.data.models.IssueItemPayload
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestStatus
@@ -18,15 +20,19 @@ import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.ui.components.requests.REQUEST_QR_PREFIX
 import com.iiitnr.inventoryapp.ui.components.requests.requestStatusActionSnackbarMessage
 import com.iiitnr.inventoryapp.utils.toAppError
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 class RequestsViewModel(
     private val tokenManager: TokenManager,
+    private val authApiService: AuthApiService,
+    private val requestApiService: RequestApiService,
 ) : ViewModel() {
     var requests by mutableStateOf<List<Request>>(emptyList())
         private set
@@ -49,12 +55,30 @@ class RequestsViewModel(
             currentUser?.role == UserRole.LA ||
             currentUser?.role == UserRole.FACULTY
 
-    fun exportRequestsCsv(): String? {
-        val user = currentUser ?: return null
-        if (user.role !in setOf(UserRole.ADMIN, UserRole.LA, UserRole.FACULTY)) return null
-        if (requests.isEmpty()) return null
+    fun exportRequestsCsv(onResult: (String?) -> Unit) {
+        val user = currentUser
+        if (user == null || user.role !in setOf(UserRole.ADMIN, UserRole.LA, UserRole.FACULTY)) {
+            onResult(null)
+            return
+        }
+        if (requests.isEmpty()) {
+            onResult(null)
+            return
+        }
 
-        return buildRequestsCsv(requests)
+        viewModelScope.launch {
+            try {
+                val token = tokenManager.token.first()
+                if (token != null) {
+                    onResult(requestApiService.exportRequestsCsv(token))
+                } else {
+                    onResult(null)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                onResult(null)
+            }
+        }
     }
 
     val filteredRequests: List<Request>
@@ -87,37 +111,42 @@ class RequestsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.authApiService.getMe("Bearer $token")
+                    val response = authApiService.getMe(token)
                     currentUser = response.user
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
             }
         }
     }
 
     fun loadRequests(pollingMode: Boolean = false) {
-        viewModelScope.launch {
-            if (pollingMode && isRefreshing) return@launch
+        viewModelScope.launch { refreshRequests(pollingMode) }
+    }
 
-            beginRequestLoad(pollingMode)
+    /** Suspend rather than fire-and-forget, so the polling loop can await a completed load. */
+    private suspend fun refreshRequests(pollingMode: Boolean) {
+        if (pollingMode && isRefreshing) return
 
-            try {
-                val token = tokenManager.token.first()
-                if (token != null) {
-                    val response = ApiClient.requestApiService.getRequests("Bearer $token")
-                    requests = response.requests
-                    errorMessage = null
-                } else {
-                    if (!pollingMode && requests.isEmpty()) {
-                        errorMessage = "No authentication token"
-                    }
+        beginRequestLoad(pollingMode)
+
+        try {
+            val token = tokenManager.token.first()
+            if (token != null) {
+                val response = requestApiService.getRequests(token)
+                requests = response.requests
+                errorMessage = null
+            } else {
+                if (!pollingMode && requests.isEmpty()) {
+                    errorMessage = "No authentication token"
                 }
-            } catch (e: Throwable) {
-                handleRequestLoadError(e, pollingMode)
-            } finally {
-                isLoading = false
-                isRefreshing = false
             }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            handleRequestLoadError(e, pollingMode)
+        } finally {
+            isLoading = false
+            isRefreshing = false
         }
     }
 
@@ -152,27 +181,31 @@ class RequestsViewModel(
 
     private fun startSseOrPolling() {
         viewModelScope.launch {
-            val token = tokenManager.token.first() ?: return@launch
+            tokenManager.token.collectLatest { token ->
+                if (token == null) return@collectLatest
+                streamWithPollingFallback(token)
+            }
+        }
+    }
 
-            var pollAttempts = 0
-            while (true) {
-                try {
-                    ApiClient.requestApiService.streamRequestEvents("Bearer $token").collect {
-                        pollAttempts = 0
-                        loadRequests(pollingMode = true)
-                    }
-                    delay(SSE_RECONNECT_DELAY_MS.milliseconds)
-                } catch (_: Exception) {
-                    while (pollAttempts < MAX_POLL_ATTEMPTS) {
-                        val backoff = POLL_BASE_DELAY_MS * (1L shl pollAttempts)
-                        delay(minOf(backoff, MAX_POLL_DELAY_MS).milliseconds)
-                        if (errorMessage == null && !isLoading && !isRefreshing) {
-                            loadRequests(pollingMode = true)
-                        }
-                        pollAttempts++
-                    }
+    private suspend fun streamWithPollingFallback(token: String) {
+        var pollAttempts = 0
+        while (true) {
+            try {
+                requestApiService.streamRequestEvents(token).collect {
                     pollAttempts = 0
+                    refreshRequests(pollingMode = true)
                 }
+                delay(SSE_RECONNECT_DELAY_MS.milliseconds)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                while (pollAttempts < MAX_POLL_ATTEMPTS) {
+                    val backoff = POLL_BASE_DELAY_MS * (1L shl pollAttempts)
+                    delay(minOf(backoff, MAX_POLL_DELAY_MS).milliseconds)
+                    refreshRequests(pollingMode = true)
+                    pollAttempts++
+                }
+                pollAttempts = 0
             }
         }
     }
@@ -182,12 +215,13 @@ class RequestsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    ApiClient.requestApiService.deleteRequest("Bearer $token", requestId)
+                    requestApiService.deleteRequest(token, requestId)
                     loadRequests()
                 } else {
                     errorMessage = "No authentication token"
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errorMessage = e.toAppError().message
             }
         }
@@ -204,8 +238,8 @@ class RequestsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    ApiClient.requestApiService.updateRequestStatus(
-                        "Bearer $token",
+                    requestApiService.updateRequestStatus(
+                        token,
                         requestId,
                         UpdateRequestStatusPayload(
                             status = status,
@@ -221,7 +255,8 @@ class RequestsViewModel(
                 } else {
                     errorMessage = "No authentication token"
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 errorMessage = e.toAppError().message
             }
         }
@@ -235,12 +270,13 @@ class RequestsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val res = ApiClient.requestApiService.generateRequestOtp("Bearer $token", requestId)
+                    val res = requestApiService.generateRequestOtp(token, requestId)
                     onResult(res.otp)
                 } else {
                     onResult(null)
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 onResult(null)
             }
         }
@@ -266,14 +302,19 @@ class RequestsViewModel(
             try {
                 val token = tokenManager.token.first()
                 if (token != null) {
-                    val response = ApiClient.requestApiService.getRequestByIdOrOtp("Bearer $token", trimmed)
+                    val response = requestApiService.getRequestByIdOrOtp(token, trimmed)
                     onResult(response.request)
                 } else {
                     _snackbarMessages.emit("Authentication error")
                     onResult(null)
                 }
             } catch (e: Exception) {
-                _snackbarMessages.emit("Request not found for: $trimmed")
+                if (e is CancellationException) throw e
+
+                val message =
+                    (e as? AppHttpException)?.errorMessage
+                        ?: "Request not found for: $trimmed"
+                _snackbarMessages.emit(message)
                 onResult(null)
             }
         }
@@ -299,49 +340,4 @@ class RequestsViewModel(
         const val MAX_POLL_DELAY_MS = 60_000L
         const val SSE_RECONNECT_DELAY_MS = 3_000L
     }
-}
-
-/** The CSV the client exports — it has to stay in step with the backend's. */
-internal fun buildRequestsCsv(requests: List<Request>): String {
-    val csvHeader =
-        "Request ID,User Email,User Name,Target Faculty,Project Title,Status,Created At,Return Due At,Late Fee (INR),Items Summary"
-    val csvRows =
-        requests.map { r ->
-            val itemsSummary =
-                r.items.joinToString("; ") { item ->
-                    val name = item.component?.name ?: item.componentId
-                    val parts = mutableListOf("Req:${item.quantity}")
-                    if (item.fulfilledQuantity > 0) {
-                        parts.add("Iss:${item.fulfilledQuantity}")
-                    }
-                    if (item.returnedQuantity > 0) {
-                        parts.add("Ret:${item.returnedQuantity}")
-                    }
-                    if (item.writtenOffQuantity > 0) {
-                        parts.add("Wrn:${item.writtenOffQuantity}")
-                    }
-                    "$name (${parts.joinToString(", ")})"
-                }
-            listOf(
-                escapeCsvField(r.id),
-                escapeCsvField(r.user?.email),
-                escapeCsvField(r.user?.name),
-                escapeCsvField(r.targetFaculty?.name ?: r.targetFaculty?.email),
-                escapeCsvField(r.projectTitle),
-                escapeCsvField(r.status.name),
-                escapeCsvField(r.createdAt),
-                escapeCsvField(r.returnDueAt),
-                escapeCsvField(r.lateFeeAccrued.toString()),
-                escapeCsvField(itemsSummary),
-            ).joinToString(",")
-        }
-    return listOf(csvHeader, *csvRows.toTypedArray()).joinToString("\n")
-}
-
-private fun escapeCsvField(field: String?): String {
-    if (field.isNullOrEmpty()) return ""
-    if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
-        return "\"${field.replace("\"", "\"\"")}\""
-    }
-    return field
 }

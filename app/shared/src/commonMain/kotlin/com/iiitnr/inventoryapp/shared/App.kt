@@ -33,6 +33,7 @@ import com.iiitnr.inventoryapp.ui.screens.ProfileScreen
 import com.iiitnr.inventoryapp.ui.screens.RegisterScreen
 import com.iiitnr.inventoryapp.ui.screens.RequestsScreen
 import com.iiitnr.inventoryapp.ui.screens.UserManagementScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -73,7 +74,8 @@ fun App(
                             onUpdateAction?.invoke() ?: uriHandler.openUri("https://inventory.iiitnr.ac.in/download")
                         }
                     }
-                } catch (e: Throwable) {
+                } catch (e: Exception) {
+                    if (e is CancellationException) throw e
                     // Silently fail on version check
                 }
             }
