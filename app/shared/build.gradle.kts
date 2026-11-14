@@ -220,6 +220,14 @@ kotlin {
             }
         }
 
+        val jvmTest =
+            sourceSets.findByName("jvmTest") ?: create("jvmTest")
+        jvmTest.dependsOn(commonTest)
+        jvmTest.dependencies {
+            implementation(compose.desktop.uiTestJUnit4)
+            implementation(compose.desktop.currentOs)
+        }
+
         val jvmMain =
             sourceSets.getByName("jvmMain") {
                 dependencies {
