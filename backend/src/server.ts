@@ -32,14 +32,18 @@ try {
 
 const signals = ['SIGINT', 'SIGTERM'];
 for (const signal of signals) {
-  process.on(signal, async () => {
-    app.log.info(`${signal} received, shutting down gracefully...`);
-    try {
-      await app.close();
-      app.log.info('Server closed successfully.');
-      process.exit(0);
-    } catch (err) {
-      throw new Error(`${err} Error during graceful shutdown`, { cause: err });
-    }
+  process.on(signal, () => {
+    void (async () => {
+      app.log.info(`${signal} received, shutting down gracefully...`);
+      try {
+        await app.close();
+        app.log.info('Server closed successfully.');
+        process.exit(0);
+      } catch (err) {
+        throw new Error(`${err} Error during graceful shutdown`, { cause: err });
+      }
+    })().catch((err) => {
+      app.log.error(err, 'Error during graceful shutdown');
+    });
   });
 }

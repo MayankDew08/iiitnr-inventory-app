@@ -126,12 +126,13 @@ andro:
 
 [group('container')]
 image:
-    cd {{backend}} && podman build -t {{img}}:{{tag}} .
+    cd {{backend}} && cp ../VERSION ./VERSION && podman build -t {{img}}:{{tag}} .
 
 [group('container')]
 size: image
     podman images {{img}}:{{tag}}
     podman history {{img}}:{{tag}} | head -12
+
 [group('container')]
 run:
     cd {{backend}} && podman run --rm --name backend-dev \
@@ -166,9 +167,46 @@ deploy-web:
 [unix]
 deploy:
     git pull
+    cp VERSION {{backend}}/VERSION
     just deploy-web
-    podman compose -f {{backend}}/compose.prod.yaml down backend
-    podman compose -f {{backend}}/compose.prod.yaml up --build -d --force-recreate backend
+    podman tag localhost/backend_backend:latest localhost/backend_backend:previous
+    podman compose -f {{backend}}/compose.prod.yaml up -d --build --force-recreate --remove-orphans backend
+    @just verify
+
+[unix]
+verify:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    c=backend-backend-1
+    start=$SECONDS
+    healthy=0
+
+    for _ in $(seq 1 30); do
+      if podman healthcheck run "$c" >/dev/null 2>&1; then
+        healthy=1
+        break
+      fi
+      sleep 2
+    done
+
+    if [ "$healthy" -ne 1 ]; then
+      echo "❌ backend never became healthy"
+      podman logs --tail 50 "$c" || true
+      exit 1
+    fi
+    echo "✅ backend healthy after $((SECONDS - start))s"
+
+    curl -fsS -o /dev/null -w 'site: %{http_code}\n' https://inventory.iiitnr.ac.in/
+
+[unix]
+previous:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    podman tag localhost/backend_backend:latest localhost/backend_backend:failed || true
+    podman tag localhost/backend_backend:previous localhost/backend_backend:latest
+    podman compose -f {{backend}}/compose.prod.yaml up -d --force-recreate backend
+    echo "rolled back to $(podman inspect localhost/backend_backend:latest --format '{{{{.ID}}}}' | cut -c1-12)"
 
 [unix]
 push: typecheck check-schema test detekt

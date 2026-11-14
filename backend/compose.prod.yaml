@@ -1,11 +1,12 @@
 services:
   caddy:
-    image: docker.io/caddy:2.11.4-alpine
+    image: docker.io/caddy:2.11.9-alpine
     restart: unless-stopped
     ports:
       - '80:80'
       - '443:443'
       - '443:443/udp'
+    mem_limit: 256m
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/etc/caddy/certs:ro
@@ -20,6 +21,7 @@ services:
       - app
 
   backend:
+    image: localhost/backend_backend:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -52,7 +54,7 @@ services:
       - app
 
   db:
-    image: docker.io/postgres:18-alpine
+    image: docker.io/postgres:18.7-alpine
     restart: unless-stopped
     env_file: .env
     environment:

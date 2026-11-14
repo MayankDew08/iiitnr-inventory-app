@@ -266,6 +266,14 @@ function handleRootRoute() {
 }
 
 const APP_VERSION: string = (() => {
+  for (const candidate of ['./VERSION', '../VERSION']) {
+    try {
+      const value = fs.readFileSync(candidate, 'utf-8').trim();
+      if (value) return value;
+    } catch {
+      /* try next */
+    }
+  }
   try {
     const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf-8'));
     return typeof pkg.version === 'string' ? pkg.version : 'unknown';
@@ -377,10 +385,9 @@ function setupHooks(app: FastifyInstance, env: AppEnvironment) {
         (err) => {
           app.log.error({ err }, 'Request expiry sweep failed');
           notifyRequestsUpdated();
-        },
-        (expired) => {
-          fanOutExpiredRequests(expired, (err, message) => app.log.error({ err }, message));
-        },
+        },(expired) => {
+           void fanOutExpiredRequests(expired, (err, message) => app.log.error({ err }, message));
+         },
       );
       stopRenewalReminderSweep = startRenewalReminderSweep((err) =>
         app.log.error({ err }, 'Renewal reminder sweep failed'),

@@ -1,15 +1,24 @@
-import { randomInt } from 'node:crypto';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { component, request, requestItem, user } from '../drizzle/schema.js';
 import { RequestStatus, UserRole } from '../utils/enums.js';
 import type { RequestStatusValue } from '../utils/enums.js';
 import { notifyRequestsUpdated } from '../utils/events.js';
+import { consumeOtp } from './otpStore.js';
 import {
   ExcessReturnQuantityError,
   InsufficientQuantityError,
   NotFoundError,
 } from '../utils/errors.js';
+
+export {
+  consumeOtp,
+  generateRequestOtp,
+  invalidateOtpForRequest,
+  isOtpLookupBlocked,
+  recordOtpLookupFailure,
+  clearOtpLookupFailures,
+} from './otpStore.js';
 
 export const REQUEST_RETURN_LIMIT_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -56,66 +65,7 @@ export async function fetchFullRequest(id: string) {
 
 export type FullRequest = Awaited<ReturnType<typeof fetchFullRequest>>;
 
-interface OtpEntry {
-  requestId: string;
-  expiresAt: number;
-}
 
-const otpStore = new Map<string, OtpEntry>();
-
-export function generateRequestOtp(requestId: string): { otp: string; expiresAt: string } {
-  const now = Date.now();
-  for (const [code, entry] of otpStore.entries()) {
-    if (entry.expiresAt < now) {
-      otpStore.delete(code);
-    }
-  }
-
-  for (const [code, entry] of otpStore.entries()) {
-    if (entry.requestId === requestId && entry.expiresAt > now) {
-      return {
-        otp: code,
-        expiresAt: new Date(entry.expiresAt).toISOString(),
-      };
-    }
-  }
-
-  let code: string;
-  do {
-    code = randomInt(1000, 10000).toString();
-  } while (otpStore.has(code));
-
-  const expiresAtMs = now + 10 * 60 * 1000;
-  otpStore.set(code, {
-    requestId,
-    expiresAt: expiresAtMs,
-  });
-
-  return {
-    otp: code,
-    expiresAt: new Date(expiresAtMs).toISOString(),
-  };
-}
-
-export function consumeOtp(otp: string): string | null {
-  const entry = otpStore.get(otp.trim());
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    otpStore.delete(otp.trim());
-    return null;
-  }
-  const requestId = entry.requestId;
-  otpStore.delete(otp.trim());
-  return requestId;
-}
-
-export function invalidateOtpForRequest(requestId: string) {
-  for (const [code, entry] of otpStore.entries()) {
-    if (entry.requestId === requestId) {
-      otpStore.delete(code);
-    }
-  }
-}
 
 export function shapeRequest(row: NonNullable<FullRequest>) {
   return {
@@ -144,9 +94,9 @@ export async function fetchFullRequestByOtpOrId(query: string) {
   if (row) return row;
 
   if (/^\d{4}$/.test(trimmed)) {
-    const entry = otpStore.get(trimmed);
-    if (entry && entry.expiresAt > Date.now()) {
-      row = await fetchFullRequest(entry.requestId);
+    const requestId = consumeOtp(trimmed);
+    if (requestId) {
+      row = await fetchFullRequest(requestId);
       if (row) return row;
     }
   }
@@ -287,8 +237,8 @@ export async function issueRequestTransaction(
         returnDueAt,
       })
       .where(eq(request.id, existingRequest.id));
-    notifyRequestsUpdated();
   });
+  notifyRequestsUpdated();
 }
 
 export async function requestForRenewalTransaction(
@@ -316,8 +266,8 @@ export async function requestForRenewalTransaction(
         renewalRequestedAt: requestedRenewalAt,
       })
       .where(eq(request.id, existingRequest.id));
-    notifyRequestsUpdated();
   });
+  notifyRequestsUpdated();
 }
 
 export async function approveRenewRequestTransaction(existingRequest: { id: string }) {
@@ -346,8 +296,8 @@ export async function approveRenewRequestTransaction(existingRequest: { id: stri
         renewalReminderSentAt: null,
       })
       .where(eq(request.id, existingRequest.id));
-    notifyRequestsUpdated();
   });
+  notifyRequestsUpdated();
 }
 
 export async function rejectRenewRequestTransaction(
@@ -373,8 +323,8 @@ export async function rejectRenewRequestTransaction(
         updatedAt: rejectedAt,
       })
       .where(eq(request.id, existingRequest.id));
-    notifyRequestsUpdated();
   });
+  notifyRequestsUpdated();
 }
 
 export async function returnRequestTransaction(
@@ -499,8 +449,8 @@ export async function returnRequestTransaction(
         returnedAt: newStatus === RequestStatus.RETURNED ? returnedAt : null,
       })
       .where(eq(request.id, existingRequest.id));
-    notifyRequestsUpdated();
   });
+  notifyRequestsUpdated();
 }
 
 export async function createRequest(

@@ -383,8 +383,15 @@ async function handleGetRequestById(
     return;
   }
 
+  const isOtpLookup = /^\d{4}$/.test(id.trim());
+  if (isOtpLookup && RequestService.isOtpLookupBlocked(currentUserId)) {
+    reply.code(429).send({ error: 'too many OTP attempts, try again later' });
+    return;
+  }
+
   const shaped = await RequestService.fetchAndShapeRequest(id);
   if (!shaped) {
+    if (isOtpLookup) RequestService.recordOtpLookupFailure(currentUserId);
     reply.code(404).send({ error: 'request not found' });
     return;
   }
@@ -399,6 +406,8 @@ async function handleGetRequestById(
     reply.code(403).send({ error: 'forbidden' });
     return;
   }
+
+  if (isOtpLookup) RequestService.clearOtpLookupFailures(currentUserId);
 
   reply.send({ request: shaped });
 }
@@ -811,7 +820,10 @@ async function handleUpdateRequestStatus(
         error:
           'request status can only be updated when status is PENDING, APPROVED, ISSUED, PARTIALLY_ISSUED, REQUESTED_RENEW, RENEWED, PARTIALLY_RETURNED, or EXPIRED',
       });
+      return;
   }
+
+  RequestService.invalidateOtpForRequest(existingRequest.id);
 }
 
 async function handleDeleteRequest(
@@ -851,6 +863,7 @@ async function handleDeleteRequest(
   }
 
   await RequestService.deleteRequest(id);
+  RequestService.invalidateOtpForRequest(id);
 
   await logAudit(
     {
@@ -956,11 +969,28 @@ async function handleGenerateOtp(
   reply: FastifyReply,
 ) {
   const requestId = req.params.id;
+  const currentUser = getCurrentUser(req);
+  const currentUserId = currentUser?.sub;
+  if (!currentUserId) {
+    reply.code(401).send({ error: 'unauthorized' });
+    return;
+  }
+
   const existing = await RequestService.fetchFullRequest(requestId);
   if (!existing) {
     reply.code(404).send({ error: 'Request not found' });
     return;
   }
+
+  if (
+    !isAdminOrLA(currentUser.role) &&
+    existing.userId !== currentUserId &&
+    existing.targetFacultyId !== currentUserId
+  ) {
+    reply.code(403).send({ error: 'forbidden' });
+    return;
+  }
+
   const result = RequestService.generateRequestOtp(requestId);
   reply.send(result);
 }
