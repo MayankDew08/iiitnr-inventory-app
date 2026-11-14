@@ -9,7 +9,8 @@ import type { CategoryValue, LocationValue, UserRoleValue } from '../utils/enums
 import { logAudit, getUserIdFromRequest } from '../utils/audit.js';
 import { isAcceptableImageUrl, sanitizeString } from '../utils/validation.js';
 import type { ValidationError } from '../utils/validation.js';
-import { escapeCsvField, parseCsv } from '../utils/csv.js';
+import { parseCsv } from '../utils/csv.js';
+import { generateComponentsCsv } from '../services/componentsCsv.js';
 
 interface ComponentBody {
   name?: string;
@@ -259,28 +260,6 @@ function shouldReturn304(modifiedSinceHeader: string | undefined, latestDateStr:
   const clientSec = clientDate.toISOString().substring(0, 19);
 
   return clientSec >= serverSec;
-}
-
-function componentToCsvRow(c: ComponentRecord): string {
-  return [
-    escapeCsvField(c.id),
-    escapeCsvField(c.name),
-    escapeCsvField(c.description),
-    escapeCsvField(c.category?.replace(/_/g, ' ') ?? null),
-    escapeCsvField(c.location?.replace(/_/g, ' ') ?? null),
-    escapeCsvField(c.imageUrl),
-    escapeCsvField(c.createdAt),
-    escapeCsvField(c.updatedAt),
-    c.totalQuantity,
-    c.availableQuantity,
-  ].join(',');
-}
-
-function generateComponentsCsv(components: ComponentRecord[]): string {
-  const header =
-    'ID,Name,Description,Category,Location,Image URL,Created At,Updated At,Total Quantity,Available Quantity';
-  const rows = components.map(componentToCsvRow);
-  return [header, ...rows].join('\n');
 }
 
 function buildUpdateData(
