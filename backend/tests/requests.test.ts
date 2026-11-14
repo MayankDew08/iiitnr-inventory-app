@@ -2191,6 +2191,89 @@ describe('Request API', () => {
       const lookupJson = lookupResponse.json();
       assert.equal(lookupJson.request.id, req.id);
       assert.equal(lookupJson.request.projectTitle, 'OTP Test Request');
+
+      const replayResponse = await app.inject({
+        method: 'GET',
+        url: `/requests/${json.otp}`,
+        headers: { authorization: `Bearer ${adminToken}` },
+      });
+      assert.equal(replayResponse.statusCode, 404);
+    });
+
+    test('POST /requests/:id/otp is forbidden for a request the caller cannot see', async () => {
+      const item = await createComponent({
+        name: 'OTP Authz Component',
+        totalQuantity: 1,
+        availableQuantity: 1,
+      });
+      createdComponentIds.push(item.id);
+
+      const req = await createRequest({
+        userId: studentId,
+        targetFacultyId: facultyId,
+        projectTitle: 'OTP Authz Request',
+        status: 'APPROVED',
+        items: [{ componentId: item.id, quantity: 1 }],
+      });
+
+      const { hash } = await import('bcryptjs');
+      const outsider = await createUser({
+        email: `outsider_${randomUUID()}@example.com`,
+        passwordHash: await hash('password123', 12),
+        name: 'Outsider',
+        role: UserRole.STUDENT,
+      });
+      createdOtherUserIds.push(outsider.id);
+      const outsiderToken = app.jwt.sign(
+        { sub: outsider.id, role: outsider.role },
+        { expiresIn: '1h' },
+      );
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/requests/${req.id}/otp`,
+        headers: { authorization: `Bearer ${outsiderToken}` },
+      });
+      assert.equal(response.statusCode, 403);
+
+      const ownerResponse = await app.inject({
+        method: 'POST',
+        url: `/requests/${req.id}/otp`,
+        headers: { authorization: `Bearer ${studentToken}` },
+      });
+      assert.equal(ownerResponse.statusCode, 200);
+    });
+
+    test('repeated wrong OTP guesses lock the user out', async () => {
+      const { hash } = await import('bcryptjs');
+      const guesser = await createUser({
+        email: `guesser_${randomUUID()}@example.com`,
+        passwordHash: await hash('password123', 12),
+        name: 'Guesser',
+        role: UserRole.STUDENT,
+      });
+      createdOtherUserIds.push(guesser.id);
+      const guesserToken = app.jwt.sign(
+        { sub: guesser.id, role: guesser.role },
+        { expiresIn: '1h' },
+      );
+
+      const codes = ['9001', '9002', '9003', '9004', '9005'];
+      for (const code of codes) {
+        const res = await app.inject({
+          method: 'GET',
+          url: `/requests/${code}`,
+          headers: { authorization: `Bearer ${guesserToken}` },
+        });
+        assert.equal(res.statusCode, 404);
+      }
+
+      const blocked = await app.inject({
+        method: 'GET',
+        url: `/requests/9006`,
+        headers: { authorization: `Bearer ${guesserToken}` },
+      });
+      assert.equal(blocked.statusCode, 429);
     });
 
     test('consumeOtp and invalidateOtpForRequest clear the mapping', () => {

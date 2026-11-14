@@ -1,9 +1,2 @@
-# Flatpak build state and exported artifacts
-/.flatpak-builder/
-/build-dir/
-/repo/
-/*.flatpak
-/build.log
-
 # Local runtime data created while packaging/testing
 /inventory.db
