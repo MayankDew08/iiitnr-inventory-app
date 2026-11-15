@@ -710,6 +710,17 @@ async function handleExpiredStatusUpdate(
   reply.send({ request: updatedRequest });
 }
 
+const UPDATABLE_REQUEST_STATUSES: RequestStatusValue[] = [
+  RequestStatus.PENDING,
+  RequestStatus.APPROVED,
+  RequestStatus.ISSUED,
+  RequestStatus.PARTIALLY_ISSUED,
+  RequestStatus.REQUESTED_RENEW,
+  RequestStatus.RENEWED,
+  RequestStatus.PARTIALLY_RETURNED,
+  RequestStatus.EXPIRED,
+];
+
 async function handleUpdateRequestStatus(
   app: { log: { error: (err: unknown) => void } },
   req: FastifyRequest,
@@ -754,16 +765,15 @@ async function handleUpdateRequestStatus(
     return;
   }
 
-  switch (existingRequest.status) {
-    case RequestStatus.PENDING:
-      await handlePendingStatusUpdate(req, reply, existingRequest, newStatus, currentUser);
-      break;
-
-    case RequestStatus.APPROVED:
-      await handleApprovedStatusUpdate(req, reply, existingRequest, newStatus, currentUser);
-      break;
-
-    case RequestStatus.ISSUED: {
+  // Data-driven dispatch: adding a new updatable status means adding one
+  // entry here (plus its handler, enum value, ACTIVE_LOAN_STATUSES and
+  // buildNotificationPlan). Centralised so the updatable set lives in one place.
+  const dispatch: Record<string, () => Promise<void>> = {
+    [RequestStatus.PENDING]: async () =>
+      handlePendingStatusUpdate(req, reply, existingRequest, newStatus, currentUser),
+    [RequestStatus.APPROVED]: async () =>
+      handleApprovedStatusUpdate(req, reply, existingRequest, newStatus, currentUser),
+    [RequestStatus.ISSUED]: async () => {
       const lastRenewReason = sanitizeString(body.lastRenewReason);
       await handleIssuedStatusUpdate(
         req,
@@ -773,10 +783,8 @@ async function handleUpdateRequestStatus(
         currentUser,
         lastRenewReason,
       );
-      break;
-    }
-
-    case RequestStatus.PARTIALLY_ISSUED: {
+    },
+    [RequestStatus.PARTIALLY_ISSUED]: async () => {
       if (newStatus === RequestStatus.ISSUED) {
         await handleApprovedStatusUpdate(req, reply, existingRequest, newStatus, currentUser);
       } else {
@@ -790,15 +798,10 @@ async function handleUpdateRequestStatus(
           lastRenewReason,
         );
       }
-      break;
-    }
-
-    case RequestStatus.REQUESTED_RENEW:
-      await handleRequestedRenewalStatusUpdate(req, reply, existingRequest, newStatus, currentUser);
-      break;
-
-    case RequestStatus.RENEWED:
-    case RequestStatus.PARTIALLY_RETURNED: {
+    },
+    [RequestStatus.REQUESTED_RENEW]: async () =>
+      handleRequestedRenewalStatusUpdate(req, reply, existingRequest, newStatus, currentUser),
+    [RequestStatus.RENEWED]: async () => {
       const renewedLastRenewReason = sanitizeString(body.lastRenewReason);
       await handleIssuedStatusUpdate(
         req,
@@ -808,20 +811,30 @@ async function handleUpdateRequestStatus(
         currentUser,
         renewedLastRenewReason,
       );
-      break;
-    }
+    },
+    [RequestStatus.PARTIALLY_RETURNED]: async () => {
+      const renewedLastRenewReason = sanitizeString(body.lastRenewReason);
+      await handleIssuedStatusUpdate(
+        req,
+        reply,
+        existingRequest,
+        newStatus,
+        currentUser,
+        renewedLastRenewReason,
+      );
+    },
+    [RequestStatus.EXPIRED]: async () =>
+      handleExpiredStatusUpdate(req, reply, existingRequest, newStatus, currentUser),
+  };
 
-    case RequestStatus.EXPIRED:
-      await handleExpiredStatusUpdate(req, reply, existingRequest, newStatus, currentUser);
-      break;
-
-    default:
-      reply.code(400).send({
-        error:
-          'request status can only be updated when status is PENDING, APPROVED, ISSUED, PARTIALLY_ISSUED, REQUESTED_RENEW, RENEWED, PARTIALLY_RETURNED, or EXPIRED',
-      });
-      return;
+  const handler = dispatch[existingRequest.status];
+  if (!handler) {
+    reply.code(400).send({
+      error: `request status can only be updated when status is ${UPDATABLE_REQUEST_STATUSES.join(', ')}`,
+    });
+    return;
   }
+  await handler();
 
   RequestService.invalidateOtpForRequest(existingRequest.id);
 }
