@@ -470,6 +470,32 @@ class ComponentsViewModel(
         }
     }
 
+    fun exportComponentsCsv(onResult: (String?) -> Unit) {
+        val role = userRole
+        if (role !in setOf(UserRole.ADMIN, UserRole.LA, UserRole.FACULTY)) {
+            onResult(null)
+            return
+        }
+        if (components.isEmpty()) {
+            onResult(null)
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                val token = tokenManager.token.first()
+                if (token != null) {
+                    onResult(componentApiService.exportComponentsCsv(token))
+                } else {
+                    onResult(null)
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                onResult(null)
+            }
+        }
+    }
+
     fun uploadImage(
         bytes: ByteArray,
         filename: String,

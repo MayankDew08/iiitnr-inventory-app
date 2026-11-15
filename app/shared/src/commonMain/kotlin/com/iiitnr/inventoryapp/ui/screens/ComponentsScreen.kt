@@ -71,13 +71,21 @@ fun ComponentsScreen(
         } ?: false
 
     fun exportComponentsCsv() {
-        exportComponentsToCsv(
-            components = viewModel.components,
-            canExportCsv = canExportCsv,
-            onExportCsv = onExportCsv,
-            scope = scope,
-            snackbarHostState = snackbarHostState,
-        )
+        val export = onExportCsv
+        if (!canExportCsv || export == null || viewModel.components.isEmpty()) return
+        viewModel.exportComponentsCsv { csvContent ->
+            val success = csvContent != null && export(csvContent)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message =
+                        if (success) {
+                            "Exported components.csv successfully"
+                        } else {
+                            "Failed to export components.csv"
+                        },
+                )
+            }
+        }
     }
 
     fun importComponentsCsv() {
@@ -244,60 +252,6 @@ fun ComponentsScreen(
     }
 }
 
-private fun exportComponentsToCsv(
-    components: List<Component>,
-    canExportCsv: Boolean,
-    onExportCsv: ((String) -> Boolean)?,
-    scope: CoroutineScope,
-    snackbarHostState: SnackbarHostState,
-) {
-    if (!canExportCsv || onExportCsv == null || components.isEmpty()) return
-
-    val csvContent = buildComponentsCsv(components)
-    val success = onExportCsv.invoke(csvContent)
-
-    scope.launch {
-        snackbarHostState.showSnackbar(
-            message =
-                if (success) {
-                    "Exported components.csv successfully"
-                } else {
-                    "Failed to export components.csv"
-                },
-        )
-    }
-}
-
-private fun buildComponentsCsv(components: List<Component>): String {
-    val csvHeader =
-        "ID,Name,Description,Category,Location,Image URL,Created At,Updated At,Total Quantity,Available Quantity"
-    val csvRows =
-        components.map { c ->
-            listOf(
-                escapeCsvField(c.id),
-                escapeCsvField(c.name),
-                escapeCsvField(c.description),
-                escapeCsvField(c.category?.replace("_", " ")),
-                escapeCsvField(c.location?.replace("_", " ")),
-                escapeCsvField(c.imageUrl),
-                escapeCsvField(c.createdAt),
-                escapeCsvField(c.updatedAt),
-                c.totalQuantity.toString(),
-                c.availableQuantity.toString(),
-            ).joinToString(",")
-        }
-    return (listOf(csvHeader) + csvRows).joinToString("\n")
-}
-
-private fun escapeCsvField(value: String?): String {
-    if (value.isNullOrEmpty()) return ""
-    val escaped = value.replace("\"", "\"\"")
-    return if (escaped.contains(",") || escaped.contains("\"") || escaped.contains("\n")) {
-        "\"$escaped\""
-    } else {
-        escaped
-    }
-}
 
 private fun resolveUploadFilename(
     extension: String,

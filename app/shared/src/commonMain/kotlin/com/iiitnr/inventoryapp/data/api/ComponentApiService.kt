@@ -56,6 +56,14 @@ class ComponentApiService(
                 setBody(csv)
             }.body()
 
+    suspend fun exportComponentsCsv(token: String): String {
+        val response =
+            client.get("$baseUrl/components/export/csv") {
+                bearer(token)
+            }
+        return response.body()
+    }
+
     suspend fun updateComponent(
         token: String,
         id: String,
