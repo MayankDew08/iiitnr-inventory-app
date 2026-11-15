@@ -35,6 +35,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,11 +47,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.iiitnr.inventoryapp.data.models.IssueItemPayload
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestItem
 import com.iiitnr.inventoryapp.data.models.RequestStatus
-import com.iiitnr.inventoryapp.data.models.ReturnItemPayload
 import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
 import com.iiitnr.inventoryapp.ui.components.requests.FulfillByIdDialog
@@ -74,20 +73,9 @@ fun RequestsScreen(
     viewModel: RequestsViewModel = koinViewModel(),
     notificationsViewModel: NotificationsViewModel = koinViewModel(),
 ) {
-    var pendingDeleteRequestId by remember { mutableStateOf<String?>(null) }
-    var pendingRenewRequestId by remember { mutableStateOf<String?>(null) }
-    var renewReasonInput by remember { mutableStateOf("") }
-    var requestToShowQr by remember { mutableStateOf<Request?>(null) }
-    var showRequestIdDialog by remember { mutableStateOf(false) }
-    var showQrScanner by remember { mutableStateOf(false) }
-    var requestIdInput by remember { mutableStateOf("") }
-    var pendingPartialIssueRequest by remember { mutableStateOf<Request?>(null) }
-    var issueItemsInput by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var pendingPartialReturnRequest by remember { mutableStateOf<Request?>(null) }
-    var returnItemsInput by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    var selectedRequestForDetail by remember { mutableStateOf<Request?>(null) }
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val dialogState = remember { RequestsDialogState() }
 
     val requests = viewModel.requests
     val isLoading = viewModel.isLoading
@@ -118,8 +106,8 @@ fun RequestsScreen(
     }
 
     fun updateRequestStatusPartialIssue(request: Request) {
-        pendingPartialIssueRequest = request
-        issueItemsInput =
+        dialogState.pendingPartialIssueRequest = request
+        dialogState.issueItemsInput =
             request.items
                 .mapNotNull { item ->
                     item.componentId?.let { componentId ->
@@ -129,8 +117,8 @@ fun RequestsScreen(
     }
 
     fun updateRequestStatusPartialReturn(request: Request) {
-        pendingPartialReturnRequest = request
-        returnItemsInput =
+        dialogState.pendingPartialReturnRequest = request
+        dialogState.returnItemsInput =
             request.items
                 .filter { it.fulfilledQuantity > it.returnedQuantity }
                 .mapNotNull { item ->
@@ -140,38 +128,44 @@ fun RequestsScreen(
                 }.toMap()
     }
 
+    val onApproveRequest = { id: String -> viewModel.updateRequestStatus(id, RequestStatus.APPROVED) }
+    val onRejectRequest = { id: String -> viewModel.updateRequestStatus(id, RequestStatus.REJECTED) }
+    val onFulfillRequest = { requestId: String ->
+        requests.firstOrNull { it.id == requestId }?.let(::updateRequestStatusPartialIssue)
+        Unit
+    }
+    val onReturnRequest = { requestId: String ->
+        requests.firstOrNull { it.id == requestId }?.let(::updateRequestStatusPartialReturn)
+        Unit
+    }
+    val onApproveRenew = { id: String -> viewModel.updateRequestStatus(id, RequestStatus.RENEWED) }
+
     fun confirmPartialIssue() {
-        val request = pendingPartialIssueRequest ?: return
-        val items =
-            issueItemsInput.filter { it.value > 0 }.map { (componentId, quantity) ->
-                IssueItemPayload(componentId = componentId, quantity = quantity)
-            }
-        pendingPartialIssueRequest = null
-        issueItemsInput = emptyMap()
-        viewModel.updateRequestStatus(request.id, RequestStatus.ISSUED, issueItems = items)
+        val request = dialogState.pendingPartialIssueRequest ?: return
+        val items = dialogState.issueItemsInput
+        dialogState.pendingPartialIssueRequest = null
+        dialogState.issueItemsInput = emptyMap()
+        viewModel.submitPartialIssue(request.id, items)
     }
 
     fun confirmPartialReturn() {
-        val request = pendingPartialReturnRequest ?: return
-        val items =
-            returnItemsInput.filter { it.value > 0 }.map { (componentId, quantity) ->
-                ReturnItemPayload(componentId = componentId, quantity = quantity)
-            }
-        pendingPartialReturnRequest = null
-        returnItemsInput = emptyMap()
-        viewModel.updateRequestStatus(request.id, RequestStatus.RETURNED, returnItems = items)
+        val request = dialogState.pendingPartialReturnRequest ?: return
+        val items = dialogState.returnItemsInput
+        dialogState.pendingPartialReturnRequest = null
+        dialogState.returnItemsInput = emptyMap()
+        viewModel.submitPartialReturn(request.id, items)
     }
 
     fun openScannedRequest(rawValue: String) {
         val input = rawValue.trim()
         if (input.isBlank()) return
 
-        showRequestIdDialog = false
-        showQrScanner = false
+        dialogState.showRequestIdDialog = false
+        dialogState.showQrScanner = false
 
         viewModel.lookupRequest(input) { request ->
             if (request != null) {
-                selectedRequestForDetail = request
+                dialogState.selectedRequestForDetail = request
             }
         }
     }
@@ -184,76 +178,65 @@ fun RequestsScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         RequestsDialogs(
-            pendingDeleteRequestId = pendingDeleteRequestId,
-            onDismissDelete = { pendingDeleteRequestId = null },
+            dialogState = dialogState,
+            onDismissDelete = { dialogState.pendingDeleteRequestId = null },
             onConfirmDelete = { id -> viewModel.deleteRequest(id) },
-            requestToShowQr = requestToShowQr,
-            onDismissQr = { requestToShowQr = null },
-            pendingRenewRequestId = pendingRenewRequestId,
-            renewReasonInput = renewReasonInput,
-            onRenewReasonChange = { renewReasonInput = it },
+            onDismissQr = { dialogState.requestToShowQr = null },
+            onRenewReasonChange = { dialogState.renewReasonInput = it },
             onConfirmRenew = {
-                val id = pendingRenewRequestId
-                val reasonInput = renewReasonInput
-                pendingRenewRequestId = null
-                renewReasonInput = ""
+                val id = dialogState.pendingRenewRequestId
+                val reasonInput = dialogState.renewReasonInput
+                dialogState.pendingRenewRequestId = null
+                dialogState.renewReasonInput = ""
                 submitRenewalIfValid(id, reasonInput) { requestId, reason ->
                     viewModel.updateRequestStatus(requestId, RequestStatus.REQUESTED_RENEW, lastRenewReason = reason)
                 }
             },
             onDismissRenew = {
-                pendingRenewRequestId = null
-                renewReasonInput = ""
+                dialogState.pendingRenewRequestId = null
+                dialogState.renewReasonInput = ""
             },
-            showRequestIdDialog = showRequestIdDialog,
-            showQrScanner = showQrScanner,
-            requestIdInput = requestIdInput,
-            onRequestIdChange = { requestIdInput = it },
-            onConfirmRequestId = { openScannedRequest(requestIdInput) },
+            onRequestIdChange = { dialogState.requestIdInput = it },
+            onConfirmRequestId = { openScannedRequest(dialogState.requestIdInput) },
             onDismissRequestId = {
-                showRequestIdDialog = false
-                requestIdInput = ""
+                dialogState.showRequestIdDialog = false
+                dialogState.requestIdInput = ""
             },
             onScanClick =
                 if (isAdminOrLA && isQrScanAvailable()) {
-                    { showQrScanner = true }
+                    { dialogState.showQrScanner = true }
                 } else {
                     null
                 },
-            pendingPartialIssueRequest = pendingPartialIssueRequest,
-            issueItemsInput = issueItemsInput,
             onIssueItemQtyChange = { componentId, quantity ->
-                issueItemsInput = issueItemsInput + (componentId to quantity)
+                dialogState.issueItemsInput = dialogState.issueItemsInput + (componentId to quantity)
             },
             onConfirmPartialIssue = { confirmPartialIssue() },
             onDismissPartialIssue = {
-                pendingPartialIssueRequest = null
-                issueItemsInput = emptyMap()
+                dialogState.pendingPartialIssueRequest = null
+                dialogState.issueItemsInput = emptyMap()
             },
-            pendingPartialReturnRequest = pendingPartialReturnRequest,
-            returnItemsInput = returnItemsInput,
             onReturnItemQtyChange = { componentId, quantity ->
-                returnItemsInput = returnItemsInput + (componentId to quantity)
+                dialogState.returnItemsInput = dialogState.returnItemsInput + (componentId to quantity)
             },
             onConfirmPartialReturn = { confirmPartialReturn() },
             onDismissPartialReturn = {
-                pendingPartialReturnRequest = null
-                returnItemsInput = emptyMap()
+                dialogState.pendingPartialReturnRequest = null
+                dialogState.returnItemsInput = emptyMap()
             },
-            selectedRequestForDetail = selectedRequestForDetail,
-            onDismissRequestDetail = { selectedRequestForDetail = null },
+            onDismissRequestDetail = { dialogState.selectedRequestForDetail = null },
             isFaculty = isFaculty,
-            onDeleteRequest = { id -> pendingDeleteRequestId = id },
-            onApproveRequest = { id -> viewModel.updateRequestStatus(id, RequestStatus.APPROVED) },
-            onRejectRequest = { id -> viewModel.updateRequestStatus(id, RequestStatus.REJECTED) },
-            onFulfillRequest = { id -> requests.firstOrNull { it.id == id }?.let(::updateRequestStatusPartialIssue) },
-            onReturnRequest = { id -> requests.firstOrNull { it.id == id }?.let(::updateRequestStatusPartialReturn) },
+            onDeleteRequest = { id -> dialogState.pendingDeleteRequestId = id },
+            onApproveRequest = onApproveRequest,
+            onRejectRequest = onRejectRequest,
+            onFulfillRequest = onFulfillRequest,
+            onReturnRequest = onReturnRequest,
             onRequestRenew = { id ->
-                pendingRenewRequestId = id
-                renewReasonInput = ""
+                dialogState.pendingRenewRequestId = id
+                dialogState.renewReasonInput = ""
             },
-            onApproveRenew = { id -> viewModel.updateRequestStatus(id, RequestStatus.RENEWED) },
-            onShowQr = { request -> requestToShowQr = request },
+            onApproveRenew = onApproveRenew,
+            onShowQr = { request -> dialogState.requestToShowQr = request },
             onFetchOtp = { requestId ->
                 kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
                     viewModel.generateRequestOtp(requestId) { otp ->
@@ -283,41 +266,37 @@ fun RequestsScreen(
             onScanRequestClick =
                 if (isAdminOrLA) {
                     {
-                        showRequestIdDialog = true
-                        requestIdInput = ""
+                        dialogState.showRequestIdDialog = true
+                        dialogState.requestIdInput = ""
                     }
                 } else {
                     null
                 },
             snackbarHostState = snackbarHostState,
-            onDeleteRequestClick = { requestId -> pendingDeleteRequestId = requestId },
-            onApproveRequest = { id -> viewModel.updateRequestStatus(id, RequestStatus.APPROVED) },
-            onRejectRequest = { id -> viewModel.updateRequestStatus(id, RequestStatus.REJECTED) },
-            onFulfillRequest = { requestId ->
-                requests.firstOrNull { it.id == requestId }?.let(::updateRequestStatusPartialIssue)
-            },
-            onReturnRequest = { requestId ->
-                requests.firstOrNull { it.id == requestId }?.let(::updateRequestStatusPartialReturn)
-            },
+            onDeleteRequestClick = { requestId -> dialogState.pendingDeleteRequestId = requestId },
+            onApproveRequest = onApproveRequest,
+            onRejectRequest = onRejectRequest,
+            onFulfillRequest = onFulfillRequest,
+            onReturnRequest = onReturnRequest,
             onRequestRenewClick = { requestId ->
-                pendingRenewRequestId = requestId
-                renewReasonInput = ""
+                dialogState.pendingRenewRequestId = requestId
+                dialogState.renewReasonInput = ""
             },
-            onApproveRenew = { id -> viewModel.updateRequestStatus(id, RequestStatus.RENEWED) },
-            onShowQr = { request -> requestToShowQr = request },
-            onCardClick = { request -> selectedRequestForDetail = request },
+            onApproveRenew = onApproveRenew,
+            onShowQr = { request -> dialogState.requestToShowQr = request },
+            onCardClick = { request -> dialogState.selectedRequestForDetail = request },
             onNavigateToNotifications = onNavigateToNotifications,
             unreadNotificationCount = notificationsViewModel.unreadCount,
         )
 
         RequestsQrScannerOverlay(
-            visible = showQrScanner,
+            visible = dialogState.showQrScanner,
             onResult = { rawValue ->
                 openScannedRequest(rawValue)
-                showQrScanner = false
+                dialogState.showQrScanner = false
             },
             onCancel = {
-                showQrScanner = false
+                dialogState.showQrScanner = false
             },
         )
     }
@@ -325,35 +304,24 @@ fun RequestsScreen(
 
 @Composable
 private fun RequestsDialogs(
-    pendingDeleteRequestId: String?,
+    dialogState: RequestsDialogState,
     onDismissDelete: () -> Unit,
     onConfirmDelete: (String) -> Unit,
-    requestToShowQr: Request?,
     onDismissQr: () -> Unit,
-    pendingRenewRequestId: String?,
-    renewReasonInput: String,
     onRenewReasonChange: (String) -> Unit,
     onConfirmRenew: () -> Unit,
     onDismissRenew: () -> Unit,
-    showRequestIdDialog: Boolean,
-    showQrScanner: Boolean,
-    requestIdInput: String,
     onRequestIdChange: (String) -> Unit,
     onConfirmRequestId: () -> Unit,
     onDismissRequestId: () -> Unit,
     onScanClick: (() -> Unit)?,
     // Partial issue/return dialogs
-    pendingPartialIssueRequest: Request?,
-    issueItemsInput: Map<String, Int>,
     onIssueItemQtyChange: (String, Int) -> Unit,
     onConfirmPartialIssue: () -> Unit,
     onDismissPartialIssue: () -> Unit,
-    pendingPartialReturnRequest: Request?,
-    returnItemsInput: Map<String, Int>,
     onReturnItemQtyChange: (String, Int) -> Unit,
     onConfirmPartialReturn: () -> Unit,
     onDismissPartialReturn: () -> Unit,
-    selectedRequestForDetail: Request?,
     onDismissRequestDetail: () -> Unit,
     isFaculty: Boolean,
     onDeleteRequest: ((String) -> Unit)?,
@@ -366,6 +334,7 @@ private fun RequestsDialogs(
     onShowQr: ((Request) -> Unit)?,
     onFetchOtp: (suspend (String) -> String?)? = null,
 ) {
+    val selectedRequestForDetail = dialogState.selectedRequestForDetail
     if (selectedRequestForDetail != null) {
         RequestDetailDialog(
             request = selectedRequestForDetail,
@@ -382,6 +351,7 @@ private fun RequestsDialogs(
         )
     }
 
+    val pendingDeleteRequestId = dialogState.pendingDeleteRequestId
     if (pendingDeleteRequestId != null) {
         AlertDialog(
             onDismissRequest = onDismissDelete,
@@ -405,7 +375,7 @@ private fun RequestsDialogs(
         )
     }
 
-    requestToShowQr?.let { request ->
+    dialogState.requestToShowQr?.let { request ->
         RequestQrDialog(
             request = request,
             onDismiss = onDismissQr,
@@ -418,18 +388,18 @@ private fun RequestsDialogs(
         )
     }
 
-    if (pendingRenewRequestId != null) {
+    if (dialogState.pendingRenewRequestId != null) {
         RenewReasonDialog(
-            reason = renewReasonInput,
+            reason = dialogState.renewReasonInput,
             onReasonChange = onRenewReasonChange,
             onConfirm = onConfirmRenew,
             onDismiss = onDismissRenew,
         )
     }
 
-    if (showRequestIdDialog && !showQrScanner) {
+    if (dialogState.showRequestIdDialog && !dialogState.showQrScanner) {
         FulfillByIdDialog(
-            requestIdInput = requestIdInput,
+            requestIdInput = dialogState.requestIdInput,
             onRequestIdChange = onRequestIdChange,
             dialogTitle = "Scan request QR / ID",
             confirmButtonLabel = "Review",
@@ -439,20 +409,20 @@ private fun RequestsDialogs(
         )
     }
 
-    pendingPartialIssueRequest?.let { request ->
+    dialogState.pendingPartialIssueRequest?.let { request ->
         PartialIssueDialog(
             request = request,
-            itemsInput = issueItemsInput,
+            itemsInput = dialogState.issueItemsInput,
             onItemQtyChange = onIssueItemQtyChange,
             onConfirm = onConfirmPartialIssue,
             onDismiss = onDismissPartialIssue,
         )
     }
 
-    pendingPartialReturnRequest?.let { request ->
+    dialogState.pendingPartialReturnRequest?.let { request ->
         PartialReturnDialog(
             request = request,
-            itemsInput = returnItemsInput,
+            itemsInput = dialogState.returnItemsInput,
             onItemQtyChange = onReturnItemQtyChange,
             onConfirm = onConfirmPartialReturn,
             onDismiss = onDismissPartialReturn,
@@ -999,4 +969,20 @@ fun PartialDialogsPreview() {
             }
         }
     }
+}
+
+@Stable
+class RequestsDialogState {
+    var pendingDeleteRequestId by mutableStateOf<String?>(null)
+    var pendingRenewRequestId by mutableStateOf<String?>(null)
+    var renewReasonInput by mutableStateOf("")
+    var requestToShowQr by mutableStateOf<Request?>(null)
+    var showRequestIdDialog by mutableStateOf(false)
+    var showQrScanner by mutableStateOf(false)
+    var requestIdInput by mutableStateOf("")
+    var pendingPartialIssueRequest by mutableStateOf<Request?>(null)
+    var issueItemsInput by mutableStateOf<Map<String, Int>>(emptyMap())
+    var pendingPartialReturnRequest by mutableStateOf<Request?>(null)
+    var returnItemsInput by mutableStateOf<Map<String, Int>>(emptyMap())
+    var selectedRequestForDetail by mutableStateOf<Request?>(null)
 }

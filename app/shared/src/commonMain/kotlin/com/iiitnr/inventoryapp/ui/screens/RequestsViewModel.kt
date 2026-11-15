@@ -262,6 +262,28 @@ class RequestsViewModel(
         }
     }
 
+    fun submitPartialIssue(
+        requestId: String,
+        items: Map<String, Int>,
+    ) {
+        val payload =
+            items.filter { it.value > 0 }.map { (componentId, quantity) ->
+                IssueItemPayload(componentId = componentId, quantity = quantity)
+            }
+        updateRequestStatus(requestId, RequestStatus.ISSUED, issueItems = payload)
+    }
+
+    fun submitPartialReturn(
+        requestId: String,
+        items: Map<String, Int>,
+    ) {
+        val payload =
+            items.filter { it.value > 0 }.map { (componentId, quantity) ->
+                ReturnItemPayload(componentId = componentId, quantity = quantity)
+            }
+        updateRequestStatus(requestId, RequestStatus.RETURNED, returnItems = payload)
+    }
+
     fun generateRequestOtp(
         requestId: String,
         onResult: (String?) -> Unit,
