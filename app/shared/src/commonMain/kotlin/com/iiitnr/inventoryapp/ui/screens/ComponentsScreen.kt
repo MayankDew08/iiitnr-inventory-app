@@ -38,7 +38,6 @@ import com.iiitnr.inventoryapp.ui.components.components.ComponentsContent
 import com.iiitnr.inventoryapp.ui.components.components.ComponentsTopBar
 import com.iiitnr.inventoryapp.ui.platform.CameraCaptureContent
 import com.iiitnr.inventoryapp.ui.platform.pickImage
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -252,7 +251,6 @@ fun ComponentsScreen(
         }
     }
 }
-
 
 private fun resolveUploadFilename(
     extension: String,
