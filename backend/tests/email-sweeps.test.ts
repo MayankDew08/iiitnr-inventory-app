@@ -6,11 +6,8 @@ import { db } from '../src/drizzle/db.js';
 import { request, requestEmail, component } from '../src/drizzle/schema.js';
 import { setMailSender } from '../src/services/email-service.js';
 import { IST_DAY_MS, istDayStart, istDaysBetween } from '../src/services/date-utils.js';
-import {
-  computeLateFee,
-  findLateFeeCandidates,
-  runLateFeeSweep,
-} from '../src/services/late-fee.js';
+import { findLateFeeCandidates, runLateFeeSweep } from '../src/services/late-fee.js';
+import { computeLateFee } from '../src/services/fine-policy.js';
 import { findRenewalChaseCandidates, runRenewalChaseSweep } from '../src/services/renewal-chase.js';
 import { sendExpiryNotices } from '../src/services/expiry-notice.js';
 import { createComponent, createRequest, createUser, deleteAllRequests } from './helpers.js';
