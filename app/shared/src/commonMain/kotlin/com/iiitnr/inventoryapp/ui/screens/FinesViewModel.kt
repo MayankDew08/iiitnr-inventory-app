@@ -41,7 +41,7 @@ class FinesViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response = requestApiService.getRequests(token)
-                    fines = response.requests.filter { it.lateFeeAccrued > 0 && it.returnedAt == null }
+                    fines = response.requests.filter(::isPayableFine)
                 } else {
                     errorMessage = "No authentication token"
                 }
@@ -64,3 +64,7 @@ class FinesViewModel(
 }
 
 internal fun computeTotalOwed(fines: List<Request>): Int = fines.sumOf { it.lateFeeAccrued }
+
+/** A payable bill: returned, has a fine, and not yet settled. */
+internal fun isPayableFine(request: Request): Boolean =
+    request.returnedAt != null && request.lateFeeAccrued > 0 && request.fineSettledAt == null
