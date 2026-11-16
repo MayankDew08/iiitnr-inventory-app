@@ -111,16 +111,24 @@ detekt:
     cd {{app}} && {{gradle}} detekt
 
 # Everything CI enforces on a PR, except the DB-backed backend tests. Run per commit.
+# Steps run concurrently and a passing run prints one line.
 [group('quality')]
-check-fast: typecheck lint detekt check-schema fmt-check app-test app-build
+check-fast *ARGS:
+    @./bin/check.sh --fast {{ARGS}}
 
 # Full pre-push gate: check-fast plus the backend test suite, in a throwaway Postgres.
 [group('quality')]
-check: check-fast test
+check *ARGS:
+    @./bin/check.sh {{ARGS}}
 
 # check plus the web bundle deploy-pages ships. Run before merging shared/ or web/ changes.
 [group('quality')]
-check-full: check web-build
+check-full *ARGS:
+    @./bin/check.sh --full {{ARGS}}
+
+# Sequential equivalent of `check`, for environments without bash (e.g. Windows).
+[group('quality')]
+check-seq: typecheck lint detekt check-schema fmt-check app-test app-build test
 
 [group('schema')]
 gen-schema:

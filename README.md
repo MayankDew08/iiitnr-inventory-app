@@ -354,6 +354,7 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | `just check-fast` | Runs every CI pull-request gate except the DB-backed backend tests | Quality / CI |
 | `just check` | The full pre-push gate: `check-fast` plus the backend test suite | Quality / CI |
 | `just check-full` | `check` plus the web bundle build that `main` deploys | Quality / CI |
+| `just check-seq` | Sequential `check`, for shells without bash (Windows) | Quality / CI |
 | `just desk` | Compiles and launches the desktop app locally | Compose Desktop |
 | `just andro` | Builds the debug APK and installs it on the connected device | Compose Android |
 | `just web` | Launches the Kotlin WasmJs web application | Compose Web |

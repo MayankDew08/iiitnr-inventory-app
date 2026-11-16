@@ -49,11 +49,29 @@ Everything below is a subset of it, for when you want a faster loop.
 
 | Command | Covers | When to run |
 |---|---|---|
-| `just check-fast` | typecheck, eslint, ktlint, detekt, schema docs, `:shared:jvmTest`, `:android:assembleDebug` | before every commit (~20 s once warm) |
-| `just check` | `check-fast` **+** the backend test suite in a throwaway Postgres | before every push / PR (~20 s once warm) |
+| `just check-fast` | typecheck, eslint, prettier, ktlint, detekt, schema docs, `:shared:jvmTest`, `:android:assembleDebug` | before every commit (~8 s once warm) |
+| `just check` | `check-fast` **+** the backend test suite in a throwaway Postgres | before every push / PR (~16 s once warm) |
 | `just check-full` | `just check` **+** the WasmJs web bundle | before merging anything touching `app/shared/`, `app/web/`, or backend code that the web build consumes |
 
 `just push` runs `just check` and then pushes, so you cannot forget it.
+
+The steps run concurrently and the output is deliberately quiet: a passing run
+prints one line, and a failing run prints only the steps that failed.
+
+```bash
+just check                      # ✓ check passed (3 steps, 16.0s)
+just check-fast -v              # per-step timings, when one step got slow
+CHECK_VERBOSE=1 just check      # same, via the environment
+```
+
+**If a run feels slow, check memory before blaming the code.** Gradle is
+configured with `-Xmx6g`, so it will happily swap an 8 GB machine. Concurrency
+is capped at two steps by default (`CHECK_JOBS`); raising it only helps when
+there is headroom, and the backend suite is usually the long pole regardless.
+`CHECK_GRADLE_PARALLEL=1` enables cross-project Gradle parallelism.
+
+The gate needs bash. On Windows use `just check-seq`, which runs the same steps
+sequentially.
 
 ### What breaks if you skip a step
 
