@@ -65,8 +65,6 @@ export async function fetchFullRequest(id: string) {
 
 export type FullRequest = Awaited<ReturnType<typeof fetchFullRequest>>;
 
-
-
 export function shapeRequest(row: NonNullable<FullRequest>) {
   return {
     ...row,

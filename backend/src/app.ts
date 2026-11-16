@@ -385,9 +385,10 @@ function setupHooks(app: FastifyInstance, env: AppEnvironment) {
         (err) => {
           app.log.error({ err }, 'Request expiry sweep failed');
           notifyRequestsUpdated();
-        },(expired) => {
-           void fanOutExpiredRequests(expired, (err, message) => app.log.error({ err }, message));
-         },
+        },
+        (expired) => {
+          void fanOutExpiredRequests(expired, (err, message) => app.log.error({ err }, message));
+        },
       );
       stopRenewalReminderSweep = startRenewalReminderSweep((err) =>
         app.log.error({ err }, 'Renewal reminder sweep failed'),
