@@ -226,8 +226,8 @@ expiry and renewal reminders are in
 
 ### Prerequisites
 Make sure you have the following installed on your developer machine:
-- [Bun Runtime](https://bun.sh/) (v1.3.11+)
-- [Java Development Kit (JDK) 17+](https://adoptium.net/temurin/releases/) (Required for KMP compilation)
+- [Bun Runtime](https://bun.sh/) (v1.4+)
+- [Java Development Kit (JDK) 25+](https://adoptium.net/temurin/releases/) (Required for KMP compilation)
 - [Podman](https://podman.io/) or [Docker](https://www.docker.com/) (For launching the database)
 - [Just](https://github.com/casey/just) task runner (Optional, but highly recommended)
 
@@ -348,6 +348,12 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | `just up` / `just down` | Spins up/down the development Podman Compose stack (`compose.yaml`) | Full Stack |
 | `just logs` | Follows logs from the compose container stack | Diagnostics |
 | `just test` | Starts the test database via Compose and runs the backend test suite; the Compose teardown runs on exit | Quality / CI |
+| `just app-test` | Runs the shared Kotlin Multiplatform unit tests (JVM target) | Quality / CI |
+| `just app-build` | Compiles the Android debug APK — also covers `androidMain` | Quality / CI |
+| `just web-build` | Builds the WasmJs web distribution, as the Pages deploy does | Quality / CI |
+| `just check-fast` | Runs every CI pull-request gate except the DB-backed backend tests | Quality / CI |
+| `just check` | The full pre-push gate: `check-fast` plus the backend test suite | Quality / CI |
+| `just check-full` | `check` plus the web bundle build that `main` deploys | Quality / CI |
 | `just desk` | Compiles and launches the desktop app locally | Compose Desktop |
 | `just andro` | Builds the debug APK and installs it on the connected device | Compose Android |
 | `just web` | Launches the Kotlin WasmJs web application | Compose Web |
@@ -355,6 +361,7 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | `just lint-fix` | Formats both backend source files and Kotlin source files | Formatters |
 | `just typecheck` | Validates TypeScript configuration and resolves type-errors | Backend TypeScript |
 | `just fmt` | Prettifies backend and client files | Formatters |
+| `just fmt-check` | Verifies everything is already formatted, without rewriting | Quality / Checks |
 | `just detekt` | Runs deep static code quality analysis on KMP project | Quality Client |
 
 **Deployment & releases** — these affect production and are for maintainers only
@@ -364,7 +371,7 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | `just deploy-web` | Builds the web client and publishes it to `/srv/web` |
 | `just deploy` | Pulls the latest commit, redeploys the web app and rebuilds the backend container |
 | `just release <version>` | Pushes to `main` and creates a GitHub release with generated notes |
-| `just push` | Typechecks, runs the schema check, tests and detekt before pushing to the remote |
+| `just push` | Runs `just check`, then pushes to the remote |
 
 ---
 
@@ -376,10 +383,12 @@ If you have `just` runner installed, you can use the following shortcuts from th
 | [docs/request-lifecycle.md](docs/request-lifecycle.md) | The request state machine, status reference and the background sweeps |
 | [docs/deployment.md](docs/deployment.md) | Production topology, environment variables and the deploy procedure |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common failures and how to fix them |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Workflow, quality gates, commit and review conventions |
 
-**Contributing:** run `just push` before opening a pull request — it typechecks,
-checks `docs/schema.md`, runs the test suite, and runs detekt, the same gates CI
-enforces on every pull request.
+**Contributing:** see [CONTRIBUTING.md](CONTRIBUTING.md). The short version:
+run `just check` before pushing — it runs every gate CI enforces on a pull
+request (typecheck, eslint, prettier, ktlint, detekt, schema docs, the KMP test
+suite, the Android build, and the backend tests).
 
 ---
 

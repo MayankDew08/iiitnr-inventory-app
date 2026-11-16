@@ -66,6 +66,21 @@ test: install
     export TEST_DATABASE_URL="{{test_db_url}}"
     bun test --parallel=1 --only-failures
 
+# Kotlin Multiplatform unit tests (JVM target) — the same suite CI runs.
+[group('test')]
+app-test:
+    cd {{app}} && {{gradle}} :shared:jvmTest
+
+# Compile the Android debug APK (also compiles androidMain, which jvmTest skips).
+[group('test')]
+app-build:
+    cd {{app}} && {{gradle}} :android:assembleDebug
+
+# Build the WasmJs web distribution, exactly as deploy-pages.yml does on main.
+[group('test')]
+web-build:
+    cd {{app}} && {{gradle}} :web:wasmJsBrowserDistribution -Pkotlin.native.ignoreDisabledTargets=true
+
 [group('quality')]
 typecheck:
     cd {{backend}} && bun run typecheck
@@ -85,12 +100,27 @@ fmt:
     cd {{backend}} && bun run format
     cd {{app}} && {{gradle}} ktlintFormat
 
+# Fails if anything is not already formatted. Never writes; use `just fmt` to fix.
+[group('quality')]
+fmt-check:
+    cd {{backend}} && bun run format:check
+    cd {{app}} && {{gradle}} ktlintCheck
+
 [group('quality')]
 detekt:
     cd {{app}} && {{gradle}} detekt
 
+# Everything CI enforces on a PR, except the DB-backed backend tests. Run per commit.
 [group('quality')]
-check: typecheck lint detekt check-schema test
+check-fast: typecheck lint detekt check-schema fmt-check app-test app-build
+
+# Full pre-push gate: check-fast plus the backend test suite, in a throwaway Postgres.
+[group('quality')]
+check: check-fast test
+
+# check plus the web bundle deploy-pages ships. Run before merging shared/ or web/ changes.
+[group('quality')]
+check-full: check web-build
 
 [group('schema')]
 gen-schema:
@@ -209,7 +239,7 @@ previous:
     echo "rolled back to $(podman inspect localhost/backend_backend:latest --format '{{{{.ID}}}}' | cut -c1-12)"
 
 [unix]
-push: typecheck check-schema test detekt
+push: check
     git push
 
 [unix]
