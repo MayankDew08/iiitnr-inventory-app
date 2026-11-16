@@ -37,6 +37,7 @@ matter in production are listed in `backend/.env.example`; at minimum:
 | `SMTP_*` | Optional — only needed for the expiry / late-fee emails, see [troubleshooting](troubleshooting.md#email) |
 | `MAIL_ENABLED` | Set to `true` to actually send. Until then the mail sweeps only log what they would send |
 | `ALLOWED_ORIGINS` | CORS allow-list for the web client |
+| `UPI_VPA` + `UPI_PAYEE_NAME` | Institute UPI VPA and payee name handed to the app for fine payments — required at boot |
 
 ## Deploying
 

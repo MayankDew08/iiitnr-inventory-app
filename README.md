@@ -262,6 +262,7 @@ platform tools** (`adb`) for `just andro`.
    | `JWT_SECRET` | Signs auth tokens — generate with `openssl rand -hex 32` |
    | `DATABASE_URL` | PostgreSQL connection string — set this when pointing at an existing database |
    | `DB_USER` + `DB_PASSWORD` | **Alternative to** `DATABASE_URL` (if you want to use the local Postgres DB started by Compose)
+   | `UPI_VPA` + `UPI_PAYEE_NAME` | Institute UPI details returned to the app for fine payments — the backend will not start without them |
 
 
 4. **Spin up a local PostgreSQL Instance (via Podman Compose):**

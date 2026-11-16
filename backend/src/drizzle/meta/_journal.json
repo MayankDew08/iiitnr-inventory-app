@@ -113,6 +113,13 @@
       "when": 1794830710212,
       "tag": "0016_lethal_retro_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794854205966,
+      "tag": "0017_calm_warbound",
+      "breakpoints": true
     }
   ]
 }

@@ -19,6 +19,7 @@ import { startRenewalChaseSweep } from './services/renewal-chase.js';
 import { startLateFeeSweep } from './services/late-fee.js';
 import { isMailEnabled } from './services/MailService.js';
 import { fanOutExpiredRequests } from './services/expiry-fanout.js';
+import { getPaymentConfig } from './services/PaymentService.js';
 import { notifyRequestsUpdated } from './utils/events.js';
 import { DomainError, ForbiddenError } from './utils/errors.js';
 import { AUTH_TOKEN_TTL_SECONDS, SESSION_COOKIE_NAME } from './utils/session-cookie.js';
@@ -514,6 +515,9 @@ function setupRoutes(app: FastifyInstance) {
 
 export async function buildApp() {
   const env = getAppEnvironment();
+
+  // Fail fast when the institute UPI details are not configured.
+  getPaymentConfig();
 
   const app = Fastify({
     bodyLimit: 11 * 1024 * 1024,
