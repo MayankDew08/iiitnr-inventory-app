@@ -8,6 +8,12 @@ interface TokenManager {
     suspend fun saveToken(token: String)
 
     suspend fun clearToken()
+
+    suspend fun clearSession() {
+        clearToken()
+    }
+
+    suspend fun restoreSession(): String? = null
 }
 
 expect fun createTokenManager(): TokenManager

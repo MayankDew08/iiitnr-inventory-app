@@ -43,4 +43,13 @@ class AuthApiService(
             .get("$baseUrl/auth/me") {
                 bearer(token)
             }.body()
+
+    suspend fun createSession(): AuthResponse =
+        client
+            .post("$baseUrl/auth/session")
+            .body()
+
+    suspend fun logout() {
+        client.post("$baseUrl/auth/logout")
+    }
 }

@@ -10,6 +10,7 @@ import { logAudit } from '../utils/audit.js';
 import { isValidationError, sanitizeString } from '../utils/validation.js';
 import type { ValidationError } from '../utils/validation.js';
 import { deriveIiitnrProfileFromEmail, pickDerivedProfileUpdates } from '../utils/iiitnr-email.js';
+import { clearSessionCookie, setSessionCookie } from '../utils/session-cookie.js';
 
 interface RegisterBody {
   email?: string;
@@ -470,6 +471,7 @@ async function handleRegister(
     }
 
     const token = app.jwt.sign({ sub: created.id, role: created.role });
+    setSessionCookie(reply, token);
     return reply.code(201).send({ user: created, token });
   } catch (err) {
     app.log.error(err);
@@ -527,6 +529,7 @@ async function handleLogin(
     req,
   );
 
+  setSessionCookie(reply, token);
   return reply.send({ user: toUserResponse(found), token });
 }
 
@@ -544,6 +547,44 @@ async function handleGetMe(req: FastifyRequest, reply: FastifyReply) {
   }
 
   return reply.send({ user: found });
+}
+
+/**
+ * Re-mints a token for the web client after a reload.
+ *
+ * The web build keeps the JWT in memory only, so on startup it presents the
+ * httpOnly session cookie set at login and gets a token back. Native clients
+ * never call this: they already hold the token they were issued.
+ */
+async function handleCreateSession(
+  app: { jwt: { sign: (payload: object) => string } },
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const userId = (req.user as { sub?: string })?.sub;
+
+  if (!userId) {
+    return reply.code(401).send({ error: 'invalid token' });
+  }
+
+  const found = await findUserById(userId);
+
+  if (!found) {
+    return reply.code(401).send({ error: 'invalid token' });
+  }
+
+  if (found.role === UserRole.PENDING) {
+    return reply.code(403).send({ error: 'forbidden: pending user must be verified' });
+  }
+
+  const token = app.jwt.sign({ sub: found.id, role: found.role });
+  setSessionCookie(reply, token);
+  return reply.send({ user: toUserResponse(found), token });
+}
+
+function handleLogout(_req: FastifyRequest, reply: FastifyReply) {
+  clearSessionCookie(reply);
+  return reply.code(204).send();
 }
 
 async function handleGoogleAuth(
@@ -599,6 +640,7 @@ async function handleGoogleAuth(
       req,
     );
 
+    setSessionCookie(reply, token);
     return reply.send({ user: toUserResponse(googleUser), token });
   } catch (err) {
     app.log.error({ err }, 'Google Sign-In error');
@@ -644,6 +686,19 @@ const authRoutes: FastifyPluginCallback = (app, _opts, done) => {
     },
     (req, reply) => handleGoogleAuth(app, req, reply),
   );
+
+  app.post(
+    '/session',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+      preHandler: async (request) => {
+        await request.jwtVerify();
+      },
+    },
+    (req, reply) => handleCreateSession(app, req, reply),
+  );
+
+  app.post('/logout', (req, reply) => handleLogout(req, reply));
 
   done();
 };

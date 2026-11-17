@@ -41,7 +41,10 @@ import com.iiitnr.inventoryapp.ui.screens.UserManagementScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.compose.koinInject
+
+private const val RESTORE_TIMEOUT_MS = 10_000L
 
 @Composable
 fun App(
@@ -62,7 +65,9 @@ fun App(
 
         LaunchedEffect(Unit) {
             scope.launch {
-                val token = tokenManager.token.first()
+                val token =
+                    tokenManager.token.first()
+                        ?: withTimeoutOrNull(RESTORE_TIMEOUT_MS) { tokenManager.restoreSession() }
                 startDestination = if (token != null) "components" else "login"
             }
             scope.launch {
@@ -87,7 +92,7 @@ fun App(
             scope.launch {
                 AuthEventManager.events.collect { event ->
                     if (event is AuthEvent.Unauthorized) {
-                        tokenManager.clearToken()
+                        tokenManager.clearSession()
                         scope.launch {
                             snackbarHostState.showSnackbar(
                                 message = "Session expired. Please login again.",

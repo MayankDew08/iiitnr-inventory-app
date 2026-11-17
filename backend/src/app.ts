@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 import Fastify, { LogController } from 'fastify';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -19,7 +20,8 @@ import { startLateFeeSweep } from './services/late-fee.js';
 import { isMailEnabled } from './services/MailService.js';
 import { fanOutExpiredRequests } from './services/expiry-fanout.js';
 import { notifyRequestsUpdated } from './utils/events.js';
-import { DomainError } from './utils/errors.js';
+import { DomainError, ForbiddenError } from './utils/errors.js';
+import { AUTH_TOKEN_TTL_SECONDS, SESSION_COOKIE_NAME } from './utils/session-cookie.js';
 
 interface AppEnvironment {
   isTest: boolean;
@@ -107,7 +109,7 @@ function buildRateLimitConfig(app: FastifyInstance) {
     // keying on the header hands every request a fresh bucket. Unauthenticated
     // and forged-token requests fall back to the client IP.
     keyGenerator: (request: FastifyRequest) => {
-      const token = readBearerToken(request);
+      const token = readRequestToken(request);
       if (token) {
         try {
           const payload = app.jwt.verify<{ sub?: string }>(token);
@@ -140,6 +142,14 @@ function readBearerToken(request: FastifyRequest): string | undefined {
   if (!header?.startsWith('Bearer ')) return undefined;
   const token = header.slice('Bearer '.length).trim();
   return token.length > 0 ? token : undefined;
+}
+
+function readRequestToken(request: FastifyRequest): string | undefined {
+  const bearer = readBearerToken(request);
+  if (bearer) return bearer;
+
+  const cookieToken = request.cookies?.[SESSION_COOKIE_NAME];
+  return cookieToken && cookieToken.length > 0 ? cookieToken : undefined;
 }
 
 async function parseFormUrlEncoded(req: FastifyRequest, body: string) {
@@ -261,6 +271,25 @@ function isValidHttpErrorCode(code: number | undefined): code is number {
   return code !== undefined && code >= 400 && code < 600;
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+function setupCookieOriginGuard(app: FastifyInstance, env: AppEnvironment) {
+  const corsOrigin = buildCorsOrigin(env, getAllowedOrigins());
+
+  app.addHook('onRequest', (request, _reply, done) => {
+    if (SAFE_METHODS.has(request.method)) return done();
+    if (request.headers.authorization) return done();
+    if (!request.cookies?.[SESSION_COOKIE_NAME]) return done();
+
+    const origin = request.headers.origin;
+    if (!origin) return done();
+    if (corsOrigin === true) return done();
+    if (Array.isArray(corsOrigin) && corsOrigin.includes(origin)) return done();
+
+    return done(new ForbiddenError('cross-origin request rejected'));
+  });
+}
+
 function handleRootRoute() {
   return { message: 'IIITNR Inventory App Backend' };
 }
@@ -311,10 +340,13 @@ async function registerPlugins(app: FastifyInstance, env: AppEnvironment) {
 
   await app.register(cors, {
     origin: buildCorsOrigin(env, allowedOrigins),
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['Last-Modified'],
   });
+
+  await app.register(cookie);
 
   await app.register(helmet, {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -326,7 +358,11 @@ async function registerPlugins(app: FastifyInstance, env: AppEnvironment) {
 
   await app.register(jwt, {
     secret: getJwtSecret(),
-    sign: { expiresIn: '7d' },
+    sign: { expiresIn: AUTH_TOKEN_TTL_SECONDS },
+    cookie: { cookieName: SESSION_COOKIE_NAME, signed: false },
+    messages: {
+      noAuthorizationInCookieMessage: 'No Authorization was found in request.headers or cookies',
+    },
   });
 
   await app.register(multipart, {
@@ -368,6 +404,8 @@ function setupHooks(app: FastifyInstance, env: AppEnvironment) {
   if (env.isProd) {
     app.addHook('onRequest', handleHttpsRedirect);
   }
+
+  setupCookieOriginGuard(app, env);
 
   let stopRequestExpirySweep: (() => void) | undefined;
   let stopRenewalReminderSweep: (() => void) | undefined;
