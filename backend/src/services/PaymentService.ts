@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
 import { payment, paymentAllocation, request } from '../drizzle/schema.js';
 import { DomainError, ForbiddenError, NotFoundError } from '../utils/errors.js';
@@ -10,13 +10,19 @@ export type PaymentWithAllocations = PaymentRecord & {
   allocations: PaymentAllocationRecord[];
 };
 
+// The "delete the dead PENDING" branch must commit before the 400 is raised;
+// throwing inside the transaction would roll the delete back.
+type CreateIntentResult =
+  | { ok: true; payment: PaymentWithAllocations }
+  | { ok: false; error: DomainError };
+
 /**
- * Returns the student's PENDING payment, or creates one covering every unpaid
- * finalized fine. The amount is always computed here from the database; any
- * amount supplied by a client is ignored.
+ * Returns the student's PENDING payment, refreshed against the current set of
+ * unpaid finalized fines, or creates one covering them. The amount is always
+ * computed here from the database; any amount supplied by a client is ignored.
  */
 export async function createPaymentIntent(userId: string): Promise<PaymentWithAllocations> {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx): Promise<CreateIntentResult> => {
     const [existing] = await tx
       .select()
       .from(payment)
@@ -24,17 +30,8 @@ export async function createPaymentIntent(userId: string): Promise<PaymentWithAl
       .limit(1)
       .for('update');
 
-    if (existing) {
-      const allocations = await tx
-        .select()
-        .from(paymentAllocation)
-        .where(eq(paymentAllocation.paymentId, existing.id));
-
-      return { ...existing, allocations };
-    }
-
     // Lock the fines so a concurrent return cannot change lateFeeAccrued
-    // between this read and the allocation insert.
+    // between this read and the allocation insert/refresh.
     const fines = await tx
       .select({ id: request.id, lateFeeAccrued: request.lateFeeAccrued })
       .from(request)
@@ -49,11 +46,73 @@ export async function createPaymentIntent(userId: string): Promise<PaymentWithAl
       .for('update');
 
     if (fines.length === 0) {
-      throw new DomainError(400, 'no unpaid fines', 'NO_UNPAID_FINES');
+      // A PENDING that covers nothing is a dead intent. Delete it so the
+      // student is back to "no payment in progress" and can retry cleanly.
+      if (existing) {
+        await tx.delete(payment).where(eq(payment.id, existing.id));
+      }
+      return { ok: false, error: new DomainError(400, 'no unpaid fines', 'NO_UNPAID_FINES') };
+    }
+
+    const now = new Date().toISOString();
+
+    if (existing) {
+      const currentIds = (
+        await tx
+          .select({ requestId: paymentAllocation.requestId })
+          .from(paymentAllocation)
+          .where(eq(paymentAllocation.paymentId, existing.id))
+      )
+        .map((allocation) => allocation.requestId)
+        .sort();
+      const fineIds = fines
+        .map((fine) => fine.id)
+        .sort();
+      const unchanged =
+        currentIds.length === fineIds.length &&
+        currentIds.every((id, index) => id === fineIds[index]);
+
+      if (unchanged) {
+        const allocations = await tx
+          .select()
+          .from(paymentAllocation)
+          .where(eq(paymentAllocation.paymentId, existing.id));
+
+        return { ok: true, payment: { ...existing, allocations } };
+      }
+
+      // New fines were finalized (or a previously-allocated one dropped out):
+      // rebuild the allocations and the amount on the same PENDING row.
+      await tx.delete(paymentAllocation).where(eq(paymentAllocation.paymentId, existing.id));
+
+      const total = fines.reduce((sum, fine) => sum + fine.lateFeeAccrued, 0);
+      const [updated] = await tx
+        .update(payment)
+        .set({ amount: total })
+        .where(eq(payment.id, existing.id))
+        .returning();
+
+      if (!updated) {
+        throw new Error('failed to refresh payment');
+      }
+
+      const allocations = await tx
+        .insert(paymentAllocation)
+        .values(
+          fines.map((fine) => ({
+            id: crypto.randomUUID(),
+            paymentId: existing.id,
+            requestId: fine.id,
+            amount: fine.lateFeeAccrued,
+            createdAt: now,
+          })),
+        )
+        .returning();
+
+      return { ok: true, payment: { ...updated, allocations } };
     }
 
     const total = fines.reduce((sum, fine) => sum + fine.lateFeeAccrued, 0);
-    const now = new Date().toISOString();
     const paymentId = crypto.randomUUID();
 
     const [created] = await tx
@@ -84,8 +143,51 @@ export async function createPaymentIntent(userId: string): Promise<PaymentWithAl
       )
       .returning();
 
-    return { ...created, allocations };
+    return { ok: true, payment: { ...created, allocations } };
   });
+
+  if (!result.ok) {
+    throw result.error;
+  }
+
+  return result.payment;
+}
+
+/**
+ * Lists the student's non-verified payments, newest first, with allocations
+ * loaded in one extra query so the list never does an N+1 lookup.
+ */
+export async function listMyPayments(userId: string): Promise<PaymentWithAllocations[]> {
+  const rows = await db
+    .select()
+    .from(payment)
+    .where(
+      and(eq(payment.userId, userId), inArray(payment.status, ['PENDING', 'SUBMITTED', 'REJECTED'])),
+    )
+    .orderBy(desc(payment.createdAt));
+
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const allocations = await db
+    .select()
+    .from(paymentAllocation)
+    .where(
+      inArray(
+        paymentAllocation.paymentId,
+        rows.map((row) => row.id),
+      ),
+    );
+
+  const byPaymentId = new Map<string, PaymentAllocationRecord[]>();
+  for (const allocation of allocations) {
+    const group = byPaymentId.get(allocation.paymentId) ?? [];
+    group.push(allocation);
+    byPaymentId.set(allocation.paymentId, group);
+  }
+
+  return rows.map((row) => ({ ...row, allocations: byPaymentId.get(row.id) ?? [] }));
 }
 
 /**

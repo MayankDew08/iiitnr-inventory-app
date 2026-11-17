@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   createPaymentIntent,
   getPaymentConfig,
+  listMyPayments,
   submitPayment,
 } from '../services/PaymentService.js';
 import { UnauthorizedError } from '../utils/errors.js';
@@ -212,6 +213,11 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
   app.get('/config', { preHandler: requireAuth }, (_req, reply) =>
     reply.send(getPaymentConfig()),
   );
+
+  app.get('/mine', { preHandler: requireAuth }, async (req, reply) => {
+    const payments = await listMyPayments(getCurrentUserId(req));
+    return reply.send({ payments });
+  });
 
   app.post('/:id/submit', { preHandler: requireAuth }, (req, reply) => handleSubmit(req, reply));
 

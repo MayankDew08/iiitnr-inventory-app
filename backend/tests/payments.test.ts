@@ -16,6 +16,7 @@ let app: Awaited<ReturnType<typeof buildApp>>;
 let studentToken: string;
 let otherStudentToken: string;
 let studentId: string;
+let otherStudentId: string;
 let facultyId: string;
 
 const createdUserIds: string[] = [];
@@ -130,6 +131,14 @@ async function createIntent(token: string, payload?: unknown) {
   });
 }
 
+async function getMine(token: string) {
+  return app.inject({
+    method: 'GET',
+    url: '/payments/mine',
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
 async function submit(token: string, paymentId: string, parts: Parameters<typeof buildMultipartBody>[0]) {
   const form = buildMultipartBody(parts);
   return app.inject({
@@ -175,6 +184,7 @@ beforeAll(async () => {
     name: 'Other Student',
     role: UserRole.STUDENT,
   });
+  otherStudentId = otherStudent.id;
   otherStudentToken = app.jwt.sign(
     { sub: otherStudent.id, role: otherStudent.role },
     { expiresIn: '1h' },
@@ -330,6 +340,87 @@ describe('POST /payments', () => {
       .where(eq(paymentAllocation.paymentId, firstBody.payment.id));
     assert.equal(allocations.length, 1);
   });
+
+  test('idempotent create: new fine finalized between tap and re-tap refreshes the payment', async () => {
+    await seedFine(studentId, 10);
+
+    const first = await createIntent(studentToken);
+    assert.equal(first.statusCode, 200);
+    const firstId = first.json().payment.id as string;
+
+    await seedFine(studentId, 20);
+
+    const second = await createIntent(studentToken);
+    assert.equal(second.statusCode, 200);
+    const body = second.json();
+
+    assert.equal(body.payment.id, firstId);
+    assert.equal(body.payment.amount, 30);
+    assert.equal(body.payment.allocations.length, 2);
+
+    const stored = await db.select().from(payment).where(eq(payment.userId, studentId));
+    assert.equal(stored.length, 1);
+    assert.equal(stored[0]?.amount, 30);
+
+    const allocations = await db
+      .select()
+      .from(paymentAllocation)
+      .where(eq(paymentAllocation.paymentId, firstId));
+    assert.equal(allocations.length, 2);
+    assert.equal(
+      allocations.reduce((sum, allocation) => sum + allocation.amount, 0),
+      30,
+    );
+  });
+
+  test('idempotent create: no new fines returns the existing payment unchanged', async () => {
+    const fine = await seedFine(studentId, 10);
+
+    const first = await createIntent(studentToken);
+    const second = await createIntent(studentToken);
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+
+    const firstBody = first.json();
+    const secondBody = second.json();
+    assert.equal(secondBody.payment.id, firstBody.payment.id);
+    assert.equal(secondBody.payment.amount, 10);
+    assert.equal(secondBody.payment.allocations.length, 1);
+    assert.equal(secondBody.payment.allocations[0]?.requestId, fine.id);
+
+    const allocations = await db
+      .select()
+      .from(paymentAllocation)
+      .where(eq(paymentAllocation.paymentId, firstBody.payment.id));
+    assert.equal(allocations.length, 1);
+  });
+
+  test('idempotent create: all allocated fines disappear deletes the PENDING and returns 400', async () => {
+    const fine = await seedFine(studentId, 10);
+
+    const first = await createIntent(studentToken);
+    assert.equal(first.statusCode, 200);
+    const paymentId = first.json().payment.id as string;
+
+    await db
+      .update(request)
+      .set({ fineSettledAt: new Date().toISOString() })
+      .where(eq(request.id, fine.id));
+
+    const second = await createIntent(studentToken);
+    assert.equal(second.statusCode, 400);
+    assert.equal(second.json().code, 'NO_UNPAID_FINES');
+
+    assert.equal(await getPaymentRow(paymentId), null);
+    const stored = await db.select().from(payment).where(eq(payment.userId, studentId));
+    assert.equal(stored.length, 0);
+    const allocations = await db
+      .select()
+      .from(paymentAllocation)
+      .where(eq(paymentAllocation.paymentId, paymentId));
+    assert.equal(allocations.length, 0);
+  });
 });
 
 describe('POST /payments/:id/submit', () => {
@@ -482,6 +573,136 @@ describe('GET /payments/config', () => {
       upiVpa: process.env.UPI_VPA,
       payeeName: process.env.UPI_PAYEE_NAME,
     });
+  });
+});
+
+describe('GET /payments/mine', () => {
+  test("returns the student's PENDING payment with allocations", async () => {
+    const fine = await seedFine(studentId, 10);
+    const intent = await createIntent(studentToken);
+    const paymentId = intent.json().payment.id as string;
+
+    const response = await getMine(studentToken);
+    assert.equal(response.statusCode, 200);
+
+    const payments = response.json().payments;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].id, paymentId);
+    assert.equal(payments[0].status, 'PENDING');
+    assert.equal(payments[0].amount, 10);
+    assert.equal(payments[0].allocations.length, 1);
+    assert.equal(payments[0].allocations[0].requestId, fine.id);
+  });
+
+  test('returns a SUBMITTED payment with utr, proofImageUrl and submittedAt populated', async () => {
+    await seedFine(studentId, 20);
+    const intent = await createIntent(studentToken);
+    const paymentId = intent.json().payment.id as string;
+
+    const submitted = await submit(studentToken, paymentId, [
+      { name: 'utr', value: 'UTR-MINE-001' },
+      proofPart(),
+    ]);
+    assert.equal(submitted.statusCode, 200);
+
+    const response = await getMine(studentToken);
+    const payments = response.json().payments;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].status, 'SUBMITTED');
+    assert.equal(payments[0].utr, 'UTR-MINE-001');
+    assert.ok(payments[0].proofImageUrl.includes('/uploads/payments/'));
+    assert.ok(payments[0].submittedAt);
+  });
+
+  test('returns a REJECTED payment with rejectedAt and rejectionReason populated', async () => {
+    const now = new Date().toISOString();
+    const [seeded] = await db
+      .insert(payment)
+      .values({
+        id: randomUUID(),
+        userId: studentId,
+        amount: 15,
+        status: 'REJECTED',
+        createdAt: now,
+        rejectedAt: now,
+        rejectionReason: 'UTR mismatch',
+      })
+      .returning();
+    assert.ok(seeded);
+
+    const response = await getMine(studentToken);
+    const payments = response.json().payments;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].id, seeded.id);
+    assert.equal(payments[0].status, 'REJECTED');
+    assert.ok(payments[0].rejectedAt);
+    assert.equal(payments[0].rejectionReason, 'UTR mismatch');
+    assert.deepEqual(payments[0].allocations, []);
+  });
+
+  test('does NOT return VERIFIED payments', async () => {
+    const now = new Date().toISOString();
+    await db.insert(payment).values({
+      id: randomUUID(),
+      userId: studentId,
+      amount: 25,
+      status: 'VERIFIED',
+      createdAt: now,
+      verifiedAt: now,
+    });
+
+    await seedFine(studentId, 10);
+    await createIntent(studentToken);
+
+    const response = await getMine(studentToken);
+    const payments = response.json().payments;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].status, 'PENDING');
+    assert.ok(payments.every((row: { status: string }) => row.status !== 'VERIFIED'));
+  });
+
+  test("does NOT return another student's payments", async () => {
+    const now = new Date().toISOString();
+    await db.insert(payment).values({
+      id: randomUUID(),
+      userId: otherStudentId,
+      amount: 30,
+      status: 'PENDING',
+      createdAt: now,
+    });
+
+    await seedFine(studentId, 10);
+    await createIntent(studentToken);
+
+    const response = await getMine(studentToken);
+    const payments = response.json().payments;
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0].amount, 10);
+    assert.ok(payments.every((row: { userId?: string }) => row.userId !== otherStudentId));
+  });
+
+  test('orders payments newest first', async () => {
+    const base = Date.parse('2026-01-01T00:00:00.000Z');
+    for (const [amount, offset] of [
+      [1, 1000],
+      [2, 3000],
+      [3, 2000],
+    ]) {
+      await db.insert(payment).values({
+        id: randomUUID(),
+        userId: studentId,
+        amount,
+        status: 'PENDING',
+        createdAt: new Date(base + offset).toISOString(),
+      });
+    }
+
+    const response = await getMine(studentToken);
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      response.json().payments.map((row: { amount: number }) => row.amount),
+      [2, 3, 1],
+    );
   });
 });
 
