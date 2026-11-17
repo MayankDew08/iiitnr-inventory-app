@@ -82,6 +82,7 @@
     <ID>TooGenericExceptionCaught:FinesScreen.kt:e: Exception</ID>
     <ID>TooGenericExceptionCaught:FinesViewModel.kt:FinesViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:NotificationsViewModel.kt:NotificationsViewModel$e: Exception</ID>
+    <ID>TooGenericExceptionCaught:PaymentViewModel.kt:PaymentViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ProfileViewModel.kt:ProfileViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:RequestsViewModel.kt:RequestsViewModel$e: Exception</ID>
     <ID>TooGenericExceptionCaught:UserManagementViewModel.kt:UserManagementViewModel$e: Exception</ID>

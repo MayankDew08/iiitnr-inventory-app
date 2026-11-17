@@ -92,4 +92,5 @@ object ApiClient {
     val auditLogApiService: AuditLogApiService = AuditLogApiService(client, BASE_URL)
     val userApiService: UserApiService = UserApiService(client, BASE_URL)
     val versionApiService: VersionApiService = VersionApiService(client, BASE_URL)
+    val paymentApi: PaymentApi = PaymentApi(client, BASE_URL)
 }

@@ -15,6 +15,7 @@ import com.iiitnr.inventoryapp.ui.platform.setImagePickerActivity
 import com.iiitnr.inventoryapp.ui.theme.IIITNRInventoryAppTheme
 import com.iiitnr.inventoryapp.ui.theme.rememberThemeMode
 import com.iiitnr.inventoryapp.ui.theme.resolveIsDark
+import com.iiitnr.inventoryapp.utils.setIntentLauncherActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
         val webClientId = resources.getString(R.string.google_web_client_id)
         googleSignInHelper = GoogleSignInHelper(this, webClientId)
         setImagePickerActivity(this)
+        setIntentLauncherActivity(this)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             enableEdgeToEdge()

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.iiitnr.inventoryapp.data.models.Payment
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
@@ -51,6 +52,7 @@ import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialogContent
 import com.iiitnr.inventoryapp.utils.currentToday
 import com.iiitnr.inventoryapp.utils.formatDisplayDate
+import com.iiitnr.inventoryapp.utils.timeAgo
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import org.koin.compose.viewmodel.koinViewModel
@@ -58,6 +60,8 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun FinesScreen(
     onNavigateBack: () -> Unit,
+    onStartPayment: () -> Unit,
+    onResumePayment: () -> Unit,
     viewModel: FinesViewModel = koinViewModel(),
 ) {
     var selectedRequest by remember { mutableStateOf<Request?>(null) }
@@ -83,6 +87,8 @@ fun FinesScreen(
                 isExpanded = isExpanded,
                 selectedRequest = selectedRequest,
                 onSelect = { selectedRequest = it },
+                onStartPayment = onStartPayment,
+                onResumePayment = onResumePayment,
             )
         }
 
@@ -104,6 +110,8 @@ private fun FinesBody(
     isExpanded: Boolean,
     selectedRequest: Request?,
     onSelect: (Request) -> Unit,
+    onStartPayment: () -> Unit,
+    onResumePayment: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -123,27 +131,35 @@ private fun FinesBody(
                 }
             }
 
-            viewModel.fines.isEmpty() -> {
+            viewModel.fines.isEmpty() && viewModel.payments.isEmpty() -> {
                 FinesCenteredState { FinesEmptyState() }
             }
 
             isExpanded -> {
                 FinesMasterDetail(
                     fines = viewModel.fines,
+                    payments = viewModel.payments,
                     total = viewModel.totalOwed,
                     today = today,
                     selectedRequest = selectedRequest,
                     onSelect = onSelect,
+                    onStartPayment = onStartPayment,
+                    onResumePayment = onResumePayment,
                 )
             }
 
             else -> {
-                FinesContent(
-                    fines = viewModel.fines,
-                    total = viewModel.totalOwed,
-                    today = today,
-                    onCardClick = onSelect,
-                )
+                FinesCenteredState {
+                    FinesContent(
+                        fines = viewModel.fines,
+                        payments = viewModel.payments,
+                        total = viewModel.totalOwed,
+                        today = today,
+                        onCardClick = onSelect,
+                        onStartPayment = onStartPayment,
+                        onResumePayment = onResumePayment,
+                    )
+                }
             }
         }
     }
@@ -162,23 +178,124 @@ private fun FinesCenteredState(content: @Composable () -> Unit) {
 @Composable
 private fun FinesContent(
     fines: List<Request>,
+    payments: List<Payment>,
     total: Int,
     today: LocalDate,
     onCardClick: (Request) -> Unit,
+    onStartPayment: () -> Unit,
+    onResumePayment: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(modifier = Modifier.widthIn(max = 800.dp).fillMaxSize()) {
-            item { FinesOverdueHeading() }
+    LazyColumn(modifier = Modifier.fillMaxSize()) {
+        pendingPayment(payments)?.let { pending ->
+            item(key = "pending-${pending.id}") {
+                PendingPaymentCard(pending = pending, onResumePayment = onResumePayment)
+            }
+        }
 
-            items(fines, key = { it.id }) { request ->
-                FineCard(
-                    request = request,
-                    today = today,
-                    onClick = onCardClick,
+        item { FinesOverdueHeading() }
+
+        items(fines, key = { it.id }) { request ->
+            FineCard(
+                request = request,
+                today = today,
+                onClick = onCardClick,
+            )
+        }
+
+        val submitted = submittedPayments(payments)
+        if (submitted.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Awaiting verification",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                 )
             }
+            items(submitted, key = { "submitted-${it.id}" }) { payment ->
+                PaymentRow(
+                    title = "₹${payment.amount}",
+                    detail = "Submitted ${timeAgo(payment.submittedAt)}",
+                )
+            }
+        }
 
-            finesSummaryItems(total = total, fineCount = fines.size)
+        val rejected = rejectedPayments(payments)
+        if (rejected.isNotEmpty()) {
+            item(key = "earlier-attempts") {
+                EarlierAttempts(rejected = rejected)
+            }
+        }
+
+        finesSummaryItems(
+            total = total,
+            fineCount = fines.size,
+            canPay = canStartPayment(fines, payments),
+            onStartPayment = onStartPayment,
+        )
+    }
+}
+
+@Composable
+private fun PendingPaymentCard(
+    pending: Payment,
+    onResumePayment: () -> Unit,
+) {
+    Card(
+        onClick = onResumePayment,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Payment in progress",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text =
+                    "You started a payment of ₹${pending.amount}, " +
+                        "${timeAgo(pending.createdAt)}. Submit UTR.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PaymentRow(
+    title: String,
+    detail: String,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun EarlierAttempts(rejected: List<Payment>) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        OutlinedButton(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxWidth()) {
+            Text("Earlier attempts (${rejected.size})")
+        }
+        if (expanded) {
+            rejected.forEach { payment ->
+                PaymentRow(
+                    title = "₹${payment.amount} · Rejected ${timeAgo(payment.rejectedAt)}",
+                    detail = payment.rejectionReason ?: "No reason given",
+                )
+            }
         }
     }
 }
@@ -190,10 +307,13 @@ private fun FinesContent(
 @Composable
 private fun FinesMasterDetail(
     fines: List<Request>,
+    payments: List<Payment>,
     total: Int,
     today: LocalDate,
     selectedRequest: Request?,
     onSelect: (Request) -> Unit,
+    onStartPayment: () -> Unit,
+    onResumePayment: () -> Unit,
 ) {
     // Keep a valid selection whenever the fine list changes.
     LaunchedEffect(fines) {
@@ -209,6 +329,12 @@ private fun FinesMasterDetail(
         ) {
             Box(modifier = Modifier.width(440.dp).fillMaxHeight()) {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    pendingPayment(payments)?.let { pending ->
+                        item(key = "pending-${pending.id}") {
+                            PendingPaymentCard(pending = pending, onResumePayment = onResumePayment)
+                        }
+                    }
+
                     item { FinesOverdueHeading() }
 
                     items(fines, key = { it.id }) { request ->
@@ -220,7 +346,12 @@ private fun FinesMasterDetail(
                         )
                     }
 
-                    finesSummaryItems(total = total, fineCount = fines.size)
+                    finesSummaryItems(
+                        total = total,
+                        fineCount = fines.size,
+                        canPay = canStartPayment(fines, payments),
+                        onStartPayment = onStartPayment,
+                    )
                 }
             }
 
@@ -250,6 +381,8 @@ private fun FinesOverdueHeading() {
 private fun LazyListScope.finesSummaryItems(
     total: Int,
     fineCount: Int,
+    canPay: Boolean,
+    onStartPayment: () -> Unit,
 ) {
     item {
         Spacer(Modifier.height(8.dp))
@@ -290,20 +423,22 @@ private fun LazyListScope.finesSummaryItems(
     item {
         Spacer(Modifier.height(20.dp))
         Button(
-            onClick = {},
-            enabled = false,
+            onClick = onStartPayment,
+            enabled = canPay,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         ) {
             Text("Pay ₹$total")
         }
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "Coming soon",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (!canPay) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Settle any payment in progress first",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         Spacer(Modifier.height(24.dp))
     }
 }

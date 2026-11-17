@@ -38,6 +38,7 @@ import com.iiitnr.inventoryapp.ui.screens.ProfileScreen
 import com.iiitnr.inventoryapp.ui.screens.RegisterScreen
 import com.iiitnr.inventoryapp.ui.screens.RequestsScreen
 import com.iiitnr.inventoryapp.ui.screens.UserManagementScreen
+import com.iiitnr.inventoryapp.ui.screens.payment.PaymentScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -166,6 +167,30 @@ fun App(
                         composable("fines") {
                             FinesScreen(
                                 onNavigateBack = { navController.popBackStack() },
+                                onStartPayment = { navController.navigate("payment/new") },
+                                onResumePayment = { navController.navigate("payment/resume") },
+                            )
+                        }
+                        composable("payment/new") {
+                            PaymentScreen(
+                                start = "new",
+                                onNavigateBack = { navController.popBackStack() },
+                                onDone = {
+                                    navController.navigate("fines") {
+                                        popUpTo("fines") { inclusive = true }
+                                    }
+                                },
+                            )
+                        }
+                        composable("payment/resume") {
+                            PaymentScreen(
+                                start = "resume",
+                                onNavigateBack = { navController.popBackStack() },
+                                onDone = {
+                                    navController.navigate("fines") {
+                                        popUpTo("fines") { inclusive = true }
+                                    }
+                                },
                             )
                         }
                         composable("fines_admin") {

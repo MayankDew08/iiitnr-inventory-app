@@ -1,5 +1,7 @@
 package com.iiitnr.inventoryapp.ui.screens
 
+import com.iiitnr.inventoryapp.data.models.Payment
+import com.iiitnr.inventoryapp.data.models.PaymentStatus
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestStatus
 import kotlin.test.Test
@@ -55,4 +57,38 @@ class FinesViewModelTest {
 
         assertFalse(isPayableFine(settled))
     }
+
+    @Test
+    fun pendingPaymentFindsPendingEntry() {
+        val pending = payment(PaymentStatus.PENDING)
+        assertEquals(pending, pendingPayment(listOf(payment(PaymentStatus.SUBMITTED), pending)))
+    }
+
+    @Test
+    fun submittedPaymentsFiltersSubmittedEntries() {
+        val submitted = payment(PaymentStatus.SUBMITTED)
+        assertEquals(listOf(submitted), submittedPayments(listOf(payment(PaymentStatus.PENDING), submitted)))
+    }
+
+    @Test
+    fun rejectedPaymentsFiltersRejectedEntries() {
+        val rejected = payment(PaymentStatus.REJECTED)
+        assertEquals(listOf(rejected), rejectedPayments(listOf(payment(PaymentStatus.VERIFIED), rejected)))
+    }
+
+    @Test
+    fun payButtonRequiresFinesAndNoPendingPayment() {
+        val fines = listOf(request(10))
+        assertTrue(canStartPayment(fines, emptyList()))
+        assertFalse(canStartPayment(fines, listOf(payment(PaymentStatus.PENDING))))
+        assertFalse(canStartPayment(emptyList(), emptyList()))
+    }
+
+    private fun payment(status: PaymentStatus) =
+        Payment(
+            id = "pay-1",
+            amount = 10,
+            status = status,
+            createdAt = "2026-11-17T10:00:00Z",
+        )
 }

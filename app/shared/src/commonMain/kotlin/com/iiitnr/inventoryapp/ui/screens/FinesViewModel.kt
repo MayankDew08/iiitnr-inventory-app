@@ -5,8 +5,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.iiitnr.inventoryapp.data.api.PaymentApi
 import com.iiitnr.inventoryapp.data.api.RequestApiService
 import com.iiitnr.inventoryapp.data.models.AppError
+import com.iiitnr.inventoryapp.data.models.Payment
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
@@ -17,8 +19,14 @@ import kotlinx.coroutines.launch
 class FinesViewModel(
     private val tokenManager: TokenManager,
     private val requestApiService: RequestApiService,
+    private val paymentApi: PaymentApi,
+    initialFines: List<Request> = emptyList(),
+    initialPayments: List<Payment> = emptyList(),
+    loadOnStart: Boolean = true,
 ) : ViewModel() {
-    var fines: List<Request> by mutableStateOf(emptyList())
+    var fines: List<Request> by mutableStateOf(initialFines)
+        private set
+    var payments: List<Payment> by mutableStateOf(initialPayments)
         private set
     var isLoading: Boolean by mutableStateOf(false)
         private set
@@ -28,10 +36,15 @@ class FinesViewModel(
     val totalOwed: Int get() = computeTotalOwed(fines)
 
     init {
-        load()
+        if (loadOnStart) load()
     }
 
     fun load() {
+        loadFines()
+        loadPayments()
+    }
+
+    private fun loadFines() {
         if (isLoading) return
 
         viewModelScope.launch {
@@ -54,6 +67,20 @@ class FinesViewModel(
         }
     }
 
+    private fun loadPayments() {
+        viewModelScope.launch {
+            try {
+                val token = tokenManager.token.first()
+                if (token != null) {
+                    payments = paymentApi.listMyPayments(token).payments
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                handleLoadError(e)
+            }
+        }
+    }
+
     private suspend fun handleLoadError(e: Throwable) {
         val appError = e.toAppError()
         // Unauthorized is handled globally (AuthEventManager redirects to login);
@@ -68,3 +95,16 @@ internal fun computeTotalOwed(fines: List<Request>): Int = fines.sumOf { it.late
 /** A payable bill: returned, has a fine, and not yet settled. */
 internal fun isPayableFine(request: Request): Boolean =
     request.returnedAt != null && request.lateFeeAccrued > 0 && request.fineSettledAt == null
+
+internal fun pendingPayment(payments: List<Payment>): Payment? = payments.firstOrNull { it.status.name == "PENDING" }
+
+internal fun submittedPayments(payments: List<Payment>): List<Payment> =
+    payments.filter { it.status.name == "SUBMITTED" }
+
+internal fun rejectedPayments(payments: List<Payment>): List<Payment> = payments.filter { it.status.name == "REJECTED" }
+
+/** The Pay button appears only with unpaid fines and no in-flight PENDING payment. */
+internal fun canStartPayment(
+    fines: List<Request>,
+    payments: List<Payment>,
+): Boolean = fines.isNotEmpty() && pendingPayment(payments) == null
