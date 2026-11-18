@@ -1,0 +1,2 @@
+CREATE TYPE "public"."PaymentRejectionReason" AS ENUM('UTR_NOT_FOUND', 'AMOUNT_MISMATCH', 'PROOF_UNCLEAR', 'DUPLICATE_PAYMENT', 'OTHER');--> statement-breakpoint
+ALTER TABLE "Payment" ADD COLUMN "rejectionReasonCode" "PaymentRejectionReason";

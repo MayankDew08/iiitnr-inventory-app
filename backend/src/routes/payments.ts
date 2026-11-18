@@ -3,13 +3,19 @@ import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join, resolve as pathResolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAdminOrLA, requireAuth } from '../middleware/auth.js';
 import {
   createPaymentIntent,
   getPaymentConfig,
+  getPaymentForAdmin,
   listMyPayments,
+  listPendingForAdmin,
+  rejectPayment,
   submitPayment,
+  verifyPayment,
 } from '../services/PaymentService.js';
+import { paymentRejectionReasonValues } from '../utils/enums.js';
+import type { PaymentRejectionReasonValue } from '../utils/enums.js';
 import { UnauthorizedError } from '../utils/errors.js';
 
 const UPLOADS_DIR = join(process.cwd(), 'uploads', 'payments');
@@ -196,6 +202,65 @@ async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
 }
 
 const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
+  // Static admin paths are registered before the /:id detail path.
+  app.get('/admin/pending', { preHandler: requireAdminOrLA }, async (_req, reply) => {
+    const payments = await listPendingForAdmin();
+    return reply.send({ payments });
+  });
+
+  app.get('/admin/:id', { preHandler: requireAdminOrLA }, async (req, reply) => {
+    const { id } = req.params as { id?: string };
+    if (!id) {
+      return reply.code(400).send({ error: 'payment id is required' });
+    }
+    const detail = await getPaymentForAdmin(id);
+    return reply.send(detail);
+  });
+
+  app.post('/admin/:id/verify', { preHandler: requireAdminOrLA }, async (req, reply) => {
+    const { id } = req.params as { id?: string };
+    if (!id) {
+      return reply.code(400).send({ error: 'payment id is required' });
+    }
+    const updated = await verifyPayment(id, getCurrentUserId(req));
+    return reply.send({ payment: updated });
+  });
+
+  app.post('/admin/:id/reject', { preHandler: requireAdminOrLA }, async (req, reply) => {
+    const { id } = req.params as { id?: string };
+    if (!id) {
+      return reply.code(400).send({ error: 'payment id is required' });
+    }
+
+    const body = (req.body ?? {}) as { reasonCode?: unknown; notes?: unknown };
+    const { reasonCode } = body;
+    if (
+      typeof reasonCode !== 'string' ||
+      !paymentRejectionReasonValues.includes(reasonCode as PaymentRejectionReasonValue)
+    ) {
+      return reply.code(400).send({ error: 'invalid reasonCode' });
+    }
+
+    let notes: string | undefined;
+    if (body.notes !== undefined && body.notes !== null) {
+      if (typeof body.notes !== 'string') {
+        return reply.code(400).send({ error: 'notes must be a string' });
+      }
+      notes = body.notes.trim();
+      if (notes.length > 500) {
+        return reply.code(400).send({ error: 'notes must be at most 500 characters' });
+      }
+    }
+
+    const updated = await rejectPayment(
+      id,
+      getCurrentUserId(req),
+      reasonCode as PaymentRejectionReasonValue,
+      notes,
+    );
+    return reply.send({ payment: updated });
+  });
+
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
     const created = await createPaymentIntent(getCurrentUserId(req));
     const { upiVpa, payeeName } = getPaymentConfig();

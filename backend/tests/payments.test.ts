@@ -5,10 +5,19 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { buildApp } from '../src/app.js';
 import { db } from '../src/drizzle/db.js';
-import { payment, paymentAllocation, request } from '../src/drizzle/schema.js';
+import {
+  auditLog,
+  component,
+  notification,
+  payment,
+  paymentAllocation,
+  request,
+  requestItem,
+} from '../src/drizzle/schema.js';
+import { NotificationType } from '../src/services/NotificationService.js';
 import { createUser, deleteAllRequests, deleteUsers, UserRole } from './helpers.js';
 
 let app: Awaited<ReturnType<typeof buildApp>>;
@@ -18,6 +27,8 @@ let otherStudentToken: string;
 let studentId: string;
 let otherStudentId: string;
 let facultyId: string;
+let laToken: string;
+let laId: string;
 
 const createdUserIds: string[] = [];
 
@@ -44,9 +55,12 @@ function cleanUploadsDir() {
 }
 
 async function clearPaymentsAndRequests() {
+  await db.delete(notification);
+  await db.delete(auditLog);
   await db.delete(paymentAllocation);
   await db.delete(payment);
   await deleteAllRequests();
+  await db.delete(component);
 }
 
 async function seedFine(
@@ -162,6 +176,103 @@ async function getRequestRow(id: string) {
   return row ?? null;
 }
 
+async function getAdminPending(token: string) {
+  return app.inject({
+    method: 'GET',
+    url: '/payments/admin/pending',
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
+async function getAdminDetail(token: string, paymentId: string) {
+  return app.inject({
+    method: 'GET',
+    url: `/payments/admin/${paymentId}`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
+async function verify(token: string, paymentId: string) {
+  return app.inject({
+    method: 'POST',
+    url: `/payments/admin/${paymentId}/verify`,
+    headers: { authorization: `Bearer ${token}` },
+  });
+}
+
+async function reject(
+  token: string,
+  paymentId: string,
+  payload: { reasonCode: unknown; notes?: unknown },
+) {
+  return app.inject({
+    method: 'POST',
+    url: `/payments/admin/${paymentId}/reject`,
+    headers: { authorization: `Bearer ${token}` },
+    payload,
+  });
+}
+
+/** Seeds a real intent + UTR submission so allocations are present. */
+async function seedSubmittedPayment(amounts: number[], utr = 'UTR-LA-001') {
+  const fines = [];
+  for (const amount of amounts) {
+    fines.push(await seedFine(studentId, amount));
+  }
+  const intent = await createIntent(studentToken);
+  assert.equal(intent.statusCode, 200);
+  const paymentId = intent.json().payment.id as string;
+  const submitted = await submit(studentToken, paymentId, [
+    { name: 'utr', value: utr },
+    proofPart(),
+  ]);
+  assert.equal(submitted.statusCode, 200);
+  return { paymentId, fines, submittedAt: submitted.json().payment.submittedAt as string };
+}
+
+async function seedPaymentWithStatus(status: 'PENDING' | 'VERIFIED' | 'REJECTED') {
+  const nowIso = new Date().toISOString();
+  const [row] = await db
+    .insert(payment)
+    .values({
+      id: randomUUID(),
+      userId: studentId,
+      amount: 20,
+      status,
+      createdAt: nowIso,
+      submittedAt: status === 'PENDING' ? null : nowIso,
+      verifiedAt: status === 'VERIFIED' ? nowIso : null,
+      rejectedAt: status === 'REJECTED' ? nowIso : null,
+    })
+    .returning();
+  return row;
+}
+
+async function seedRequestItem(requestId: string, componentName: string, quantity: number) {
+  const nowIso = new Date().toISOString();
+  const [createdComponent] = await db
+    .insert(component)
+    .values({
+      id: randomUUID(),
+      name: componentName,
+      totalQuantity: quantity,
+      availableQuantity: quantity,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    })
+    .returning();
+  await db.insert(requestItem).values({
+    id: randomUUID(),
+    requestId,
+    componentId: createdComponent.id,
+    quantity,
+    fulfilledQuantity: quantity,
+    returnedQuantity: 0,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  });
+}
+
 beforeAll(async () => {
   app = await buildApp();
 
@@ -198,7 +309,16 @@ beforeAll(async () => {
   });
   facultyId = faculty.id;
 
-  createdUserIds.push(student.id, otherStudent.id, faculty.id);
+  const la = await createUser({
+    email: `pay_la_${suffix}@example.com`,
+    passwordHash,
+    name: 'Lab Assistant',
+    role: UserRole.LA,
+  });
+  laId = la.id;
+  laToken = app.jwt.sign({ sub: la.id, role: la.role }, { expiresIn: '1h' });
+
+  createdUserIds.push(student.id, otherStudent.id, faculty.id, la.id);
 });
 
 afterEach(async () => {
@@ -727,5 +847,351 @@ describe('payment lifecycle invariants', () => {
     const afterSubmit = await getRequestRow(fine.id);
     assert.equal(afterSubmit?.fineSettledAt, null);
     assert.equal(afterSubmit?.lateFeeAccrued, 33);
+  });
+});
+
+describe('POST /payments/admin/:id/verify', () => {
+  test('LA can verify a SUBMITTED payment, flipping it to VERIFIED', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().payment.status, 'VERIFIED');
+    assert.equal((await getPaymentRow(paymentId))?.status, 'VERIFIED');
+  });
+
+  test('verifying sets fineSettledAt on all allocated requests, atomically', async () => {
+    const { paymentId, fines } = await seedSubmittedPayment([5, 10, 30]);
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    const settled = await Promise.all(fines.map((fine) => getRequestRow(fine.id)));
+    assert.ok(settled.every((row) => row?.fineSettledAt != null));
+    const timestamps = settled.map((row) => Date.parse(row!.fineSettledAt!));
+    assert.ok(Math.max(...timestamps) - Math.min(...timestamps) <= 1);
+    assert.ok(settled.every((row) => row?.updatedAt === row?.fineSettledAt));
+  });
+
+  test('verifying stamps verifiedAt and verifiedByUserId', async () => {
+    const { paymentId } = await seedSubmittedPayment([15]);
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    const stored = await getPaymentRow(paymentId);
+    assert.ok(stored?.verifiedAt);
+    assert.equal(stored?.verifiedByUserId, laId);
+  });
+
+  test('verifying an already-VERIFIED payment returns 409', async () => {
+    const seeded = await seedPaymentWithStatus('VERIFIED');
+
+    const response = await verify(laToken, seeded.id);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'PAYMENT_NOT_SUBMITTED');
+    assert.equal((await getPaymentRow(seeded.id))?.status, 'VERIFIED');
+  });
+
+  test('verifying a REJECTED payment returns 409', async () => {
+    const seeded = await seedPaymentWithStatus('REJECTED');
+
+    const response = await verify(laToken, seeded.id);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'PAYMENT_NOT_SUBMITTED');
+  });
+
+  test('verifying a PENDING payment returns 409', async () => {
+    const seeded = await seedPaymentWithStatus('PENDING');
+
+    const response = await verify(laToken, seeded.id);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'PAYMENT_NOT_SUBMITTED');
+  });
+
+  test('verifying a missing payment returns 404', async () => {
+    const response = await verify(laToken, randomUUID());
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().code, 'NOT_FOUND');
+  });
+
+  test('a student cannot call the verify endpoint (403)', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    const response = await verify(studentToken, paymentId);
+
+    assert.equal(response.statusCode, 403);
+    assert.equal((await getPaymentRow(paymentId))?.status, 'SUBMITTED');
+  });
+
+  test('two concurrent verify calls: one wins, the other gets 409', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const [first, second] = await Promise.all([
+      verify(laToken, paymentId),
+      verify(laToken, paymentId),
+    ]);
+
+    assert.deepEqual([first.statusCode, second.statusCode].sort(), [200, 409]);
+    const settled = await db
+      .select()
+      .from(paymentAllocation)
+      .where(eq(paymentAllocation.paymentId, paymentId));
+    assert.equal(settled.length, 1);
+  });
+
+  test('verify writes an audit log entry', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    const logs = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityType, 'Payment'), eq(auditLog.entityId, paymentId)));
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].action, 'UPDATE');
+    assert.equal(logs[0].userId, laId);
+    assert.deepEqual(JSON.parse(logs[0].oldValues ?? '{}'), { status: 'SUBMITTED' });
+    assert.equal(JSON.parse(logs[0].newValues ?? '{}').status, 'VERIFIED');
+  });
+
+  test('verify notifies the student', async () => {
+    const { paymentId } = await seedSubmittedPayment([25]);
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    const rows = await db
+      .select()
+      .from(notification)
+      .where(eq(notification.recipientId, studentId));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].type, NotificationType.PAYMENT_VERIFIED);
+    assert.equal(rows[0].title, 'Payment verified');
+    assert.ok(rows[0].body?.includes('₹25'));
+  });
+});
+
+describe('POST /payments/admin/:id/reject', () => {
+  test('LA can reject a SUBMITTED payment with reasonCode', async () => {
+    const { paymentId, fines } = await seedSubmittedPayment([20]);
+
+    const response = await reject(laToken, paymentId, { reasonCode: 'UTR_NOT_FOUND' });
+
+    assert.equal(response.statusCode, 200);
+    const stored = await getPaymentRow(paymentId);
+    assert.equal(stored?.status, 'REJECTED');
+    assert.ok(stored?.rejectedAt);
+    assert.equal(stored?.rejectionReasonCode, 'UTR_NOT_FOUND');
+    assert.equal(stored?.rejectionReason, null);
+
+    for (const fine of fines) {
+      assert.equal((await getRequestRow(fine.id))?.fineSettledAt, null);
+    }
+  });
+
+  test('rejecting does NOT settle any fines', async () => {
+    const { paymentId, fines } = await seedSubmittedPayment([5, 15]);
+
+    const response = await reject(laToken, paymentId, { reasonCode: 'AMOUNT_MISMATCH' });
+
+    assert.equal(response.statusCode, 200);
+    const settled = await Promise.all(fines.map((fine) => getRequestRow(fine.id)));
+    assert.ok(settled.every((row) => row?.fineSettledAt == null));
+  });
+
+  test('rejecting without a valid reasonCode returns 400', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    for (const payload of [
+      { reasonCode: 'NOT_A_REASON' },
+      { reasonCode: 123 },
+      {},
+    ]) {
+      const response = await reject(laToken, paymentId, payload);
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.json().error, 'invalid reasonCode');
+    }
+    assert.equal((await getPaymentRow(paymentId))?.status, 'SUBMITTED');
+  });
+
+  test('rejecting with notes stores the notes', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    const response = await reject(laToken, paymentId, {
+      reasonCode: 'OTHER',
+      notes: '  Bank statement shows a different reference.  ',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const stored = await getPaymentRow(paymentId);
+    assert.equal(stored?.rejectionReason, 'Bank statement shows a different reference.');
+  });
+
+  test('blank and overlong notes are handled', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    const blank = await reject(laToken, paymentId, { reasonCode: 'OTHER', notes: '   ' });
+    assert.equal(blank.statusCode, 200);
+    assert.equal((await getPaymentRow(paymentId))?.rejectionReason, null);
+
+    const second = await seedSubmittedPayment([10]);
+    const overlong = await reject(laToken, second.paymentId, {
+      reasonCode: 'OTHER',
+      notes: 'x'.repeat(501),
+    });
+    assert.equal(overlong.statusCode, 400);
+    assert.equal((await getPaymentRow(second.paymentId))?.status, 'SUBMITTED');
+  });
+
+  test('rejecting an already-REJECTED payment returns 409', async () => {
+    const seeded = await seedPaymentWithStatus('REJECTED');
+
+    const response = await reject(laToken, seeded.id, { reasonCode: 'PROOF_UNCLEAR' });
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'PAYMENT_NOT_SUBMITTED');
+  });
+
+  test('a student cannot call the reject endpoint (403)', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    const response = await reject(studentToken, paymentId, { reasonCode: 'PROOF_UNCLEAR' });
+
+    assert.equal(response.statusCode, 403);
+    assert.equal((await getPaymentRow(paymentId))?.status, 'SUBMITTED');
+  });
+
+  test('reject writes an audit log entry and notifies the student', async () => {
+    const { paymentId } = await seedSubmittedPayment([12]);
+
+    const response = await reject(laToken, paymentId, {
+      reasonCode: 'PROOF_UNCLEAR',
+      notes: 'Screenshot too blurry',
+    });
+
+    assert.equal(response.statusCode, 200);
+    const logs = await db
+      .select()
+      .from(auditLog)
+      .where(and(eq(auditLog.entityType, 'Payment'), eq(auditLog.entityId, paymentId)));
+    assert.equal(logs.length, 1);
+    assert.equal(logs[0].action, 'UPDATE');
+    assert.equal(JSON.parse(logs[0].newValues ?? '{}').reasonCode, 'PROOF_UNCLEAR');
+
+    const rows = await db
+      .select()
+      .from(notification)
+      .where(eq(notification.recipientId, studentId));
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].type, NotificationType.PAYMENT_REJECTED);
+    assert.equal(rows[0].title, 'Payment rejected');
+    assert.ok(rows[0].body?.includes('payment proof was unclear'));
+    assert.ok(rows[0].body?.includes('Screenshot too blurry'));
+  });
+});
+
+describe('GET /payments/admin/pending', () => {
+  test('returns SUBMITTED payments, oldest-first', async () => {
+    const first = await seedSubmittedPayment([10], 'UTR-OLDEST');
+    const second = await seedSubmittedPayment([20], 'UTR-NEWER');
+
+    const now = Date.parse(first.submittedAt);
+    await db
+      .update(payment)
+      .set({ submittedAt: new Date(now - 60_000).toISOString() })
+      .where(eq(payment.id, first.paymentId));
+
+    const response = await getAdminPending(laToken);
+
+    assert.equal(response.statusCode, 200);
+    const rows = response.json().payments;
+    assert.deepEqual(
+      rows.map((row: { id: string }) => row.id),
+      [first.paymentId, second.paymentId],
+    );
+    assert.equal(rows[0].userId, studentId);
+    assert.equal(rows[0].studentName, 'Paying Student');
+    assert.ok(rows[0].studentEmail.startsWith('pay_student_'));
+    assert.ok(rows[0].studentEmail.endsWith('@example.com'));
+    assert.equal(rows[0].utr, 'UTR-OLDEST');
+    assert.equal(rows[0].proofImageUrl, undefined);
+    assert.equal(rows[0].allocations, undefined);
+  });
+
+  test('excludes VERIFIED and REJECTED payments', async () => {
+    const submitted = await seedSubmittedPayment([10]);
+    await seedPaymentWithStatus('VERIFIED');
+    await seedPaymentWithStatus('REJECTED');
+
+    const response = await getAdminPending(laToken);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(
+      response.json().payments.map((row: { id: string }) => row.id),
+      [submitted.paymentId],
+    );
+  });
+
+  test('a student cannot call the admin pending endpoint (403)', async () => {
+    const response = await getAdminPending(studentToken);
+
+    assert.equal(response.statusCode, 403);
+  });
+
+  test('returns an empty list when nothing is pending', async () => {
+    const response = await getAdminPending(laToken);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { payments: [] });
+  });
+});
+
+describe('GET /payments/admin/:id', () => {
+  test('returns payment with allocations and student info', async () => {
+    const { paymentId, fines } = await seedSubmittedPayment([5, 10]);
+    await seedRequestItem(fines[0].id, 'Arduino Uno', 2);
+
+    const response = await getAdminDetail(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.equal(body.payment.id, paymentId);
+    assert.equal(body.payment.amount, 15);
+    assert.equal(body.student.id, studentId);
+    assert.equal(body.student.name, 'Paying Student');
+    assert.ok(body.student.email.includes('@example.com'));
+    assert.equal(body.allocations.length, 2);
+    assert.deepEqual(
+      body.allocations.map((allocation: { requestId: string }) => allocation.requestId).sort(),
+      fines.map((fine) => fine.id).sort(),
+    );
+    const withItem = body.allocations.find(
+      (allocation: { requestId: string }) => allocation.requestId === fines[0].id,
+    );
+    assert.deepEqual(withItem.items, [{ componentName: 'Arduino Uno', quantity: 2 }]);
+    assert.ok(withItem.projectTitle.startsWith('Fine '));
+  });
+
+  test('returns 404 for a missing payment', async () => {
+    const response = await getAdminDetail(laToken, randomUUID());
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().code, 'NOT_FOUND');
+  });
+
+  test('a student cannot call the admin detail endpoint (403)', async () => {
+    const { paymentId } = await seedSubmittedPayment([10]);
+
+    const response = await getAdminDetail(studentToken, paymentId);
+
+    assert.equal(response.statusCode, 403);
   });
 });

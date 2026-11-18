@@ -1,13 +1,50 @@
-import { and, desc, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '../drizzle/db.js';
-import { payment, paymentAllocation, request } from '../drizzle/schema.js';
+import { payment, paymentAllocation, request, user } from '../drizzle/schema.js';
+import { logAudit } from '../utils/audit.js';
+import { AuditActionType, paymentRejectionReasonValues } from '../utils/enums.js';
+import type { PaymentRejectionReasonValue } from '../utils/enums.js';
 import { DomainError, ForbiddenError, NotFoundError } from '../utils/errors.js';
+import { createNotification, NotificationType } from './NotificationService.js';
 
 export type PaymentRecord = typeof payment.$inferSelect;
 export type PaymentAllocationRecord = typeof paymentAllocation.$inferSelect;
 
 export type PaymentWithAllocations = PaymentRecord & {
   allocations: PaymentAllocationRecord[];
+};
+
+/** Summary row for the LA's pending-verification queue. */
+export interface PendingPaymentSummary {
+  id: string;
+  userId: string;
+  studentName: string | null;
+  studentEmail: string;
+  amount: number;
+  utr: string | null;
+  submittedAt: string | null;
+}
+
+/** Everything an LA needs to judge a submitted payment. */
+export interface PaymentAdminDetail {
+  payment: PaymentRecord;
+  student: { id: string; name: string | null; email: string };
+  allocations: Array<{
+    requestId: string;
+    amount: number;
+    projectTitle: string;
+    returnDueAt: string | null;
+    returnedAt: string | null;
+    items: Array<{ componentName: string; quantity: number }>;
+  }>;
+}
+
+const PAYMENT_REJECTION_LABELS: Record<PaymentRejectionReasonValue, string> = {
+  UTR_NOT_FOUND: 'UTR was not found in bank records',
+  AMOUNT_MISMATCH: 'amount received did not match',
+  PROOF_UNCLEAR: 'payment proof was unclear',
+  DUPLICATE_PAYMENT: 'this payment was already verified',
+  OTHER: 'see notes',
 };
 
 // The "delete the dead PENDING" branch must commit before the 400 is raised;
@@ -238,6 +275,226 @@ export async function submitPayment(
 
     return updated;
   });
+}
+
+/**
+ * Pending-verification queue for LA/admin. Oldest submission first so the
+ * queue is fair. Proof and allocations are intentionally omitted; the LA
+ * loads those on the detail endpoint.
+ */
+export async function listPendingForAdmin(): Promise<PendingPaymentSummary[]> {
+  return db
+    .select({
+      id: payment.id,
+      userId: payment.userId,
+      studentName: user.name,
+      studentEmail: user.email,
+      amount: payment.amount,
+      utr: payment.utr,
+      submittedAt: payment.submittedAt,
+    })
+    .from(payment)
+    .innerJoin(user, eq(payment.userId, user.id))
+    .where(eq(payment.status, 'SUBMITTED'))
+    .orderBy(asc(payment.submittedAt));
+}
+
+/** Payment, student and allocated fines with their request items. */
+export async function getPaymentForAdmin(paymentId: string): Promise<PaymentAdminDetail> {
+  const [row] = await db.select().from(payment).where(eq(payment.id, paymentId)).limit(1);
+  if (!row) {
+    throw new NotFoundError('Payment', paymentId);
+  }
+
+  const [student] = await db
+    .select({ id: user.id, name: user.name, email: user.email })
+    .from(user)
+    .where(eq(user.id, row.userId))
+    .limit(1);
+
+  const allocations = await db
+    .select()
+    .from(paymentAllocation)
+    .where(eq(paymentAllocation.paymentId, paymentId));
+
+  const requestIds = allocations.map((allocation) => allocation.requestId);
+  const requests = requestIds.length
+    ? await db.query.request.findMany({
+        where: inArray(request.id, requestIds),
+        with: { requestItems: { with: { component: true } } },
+      })
+    : [];
+  const requestsById = new Map(requests.map((linkedRequest) => [linkedRequest.id, linkedRequest]));
+
+  return {
+    payment: row,
+    student: student ?? { id: row.userId, name: null, email: '' },
+    allocations: allocations.map((allocation) => {
+      const linkedRequest = requestsById.get(allocation.requestId);
+      return {
+        requestId: allocation.requestId,
+        amount: allocation.amount,
+        projectTitle: linkedRequest?.projectTitle ?? '',
+        returnDueAt: linkedRequest?.returnDueAt ?? null,
+        returnedAt: linkedRequest?.returnedAt ?? null,
+        items:
+          linkedRequest?.requestItems.map((item) => ({
+            componentName: item.component?.name ?? 'Unknown component',
+            quantity: item.quantity,
+          })) ?? [],
+      };
+    }),
+  };
+}
+
+/**
+ * Verifies a submitted payment and settles every allocated fine in one
+ * transaction. The audit log and notification are written after commit
+ * because both helpers use the global db and swallow their own errors.
+ */
+export async function verifyPayment(
+  paymentId: string,
+  adminUserId: string,
+): Promise<PaymentRecord> {
+  const updated = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(payment)
+      .where(eq(payment.id, paymentId))
+      .limit(1)
+      .for('update');
+
+    if (!locked) {
+      throw new NotFoundError('Payment', paymentId);
+    }
+    if (locked.status !== 'SUBMITTED') {
+      throw new DomainError(409, 'payment_not_submitted', 'PAYMENT_NOT_SUBMITTED');
+    }
+
+    const allocations = await tx
+      .select()
+      .from(paymentAllocation)
+      .where(eq(paymentAllocation.paymentId, paymentId));
+
+    // Lock allocated requests in a stable order so concurrent verifies and
+    // return transactions cannot deadlock each other.
+    const requestIds = allocations.map((allocation) => allocation.requestId).sort();
+    if (requestIds.length > 0) {
+      await tx
+        .select({ id: request.id })
+        .from(request)
+        .where(inArray(request.id, requestIds))
+        .orderBy(request.id)
+        .for('update');
+    }
+
+    const now = new Date().toISOString();
+
+    if (requestIds.length > 0) {
+      await tx
+        .update(request)
+        .set({ fineSettledAt: now, updatedAt: now })
+        .where(inArray(request.id, requestIds));
+    }
+
+    const [paymentUpdated] = await tx
+      .update(payment)
+      .set({ status: 'VERIFIED', verifiedAt: now, verifiedByUserId: adminUserId })
+      .where(eq(payment.id, paymentId))
+      .returning();
+
+    if (!paymentUpdated) {
+      throw new Error('failed to verify payment');
+    }
+
+    return paymentUpdated;
+  });
+
+  await logAudit({
+    userId: adminUserId,
+    action: AuditActionType.UPDATE,
+    entityType: 'Payment',
+    entityId: updated.id,
+    oldValues: { status: 'SUBMITTED' },
+    newValues: { status: 'VERIFIED', verifiedByUserId: adminUserId },
+  });
+
+  await createNotification({
+    recipientId: updated.userId,
+    type: NotificationType.PAYMENT_VERIFIED,
+    title: 'Payment verified',
+    body: `Your payment of ₹${updated.amount} has been verified. Your fines are settled.`,
+  });
+
+  return updated;
+}
+
+/**
+ * Rejects a submitted payment without touching its allocated fines, so the
+ * student can start a fresh payment for the same amount.
+ */
+export async function rejectPayment(
+  paymentId: string,
+  adminUserId: string,
+  reasonCode: PaymentRejectionReasonValue,
+  notes?: string,
+): Promise<PaymentRecord> {
+  const updated = await db.transaction(async (tx) => {
+    const [locked] = await tx
+      .select()
+      .from(payment)
+      .where(eq(payment.id, paymentId))
+      .limit(1)
+      .for('update');
+
+    if (!locked) {
+      throw new NotFoundError('Payment', paymentId);
+    }
+    if (locked.status !== 'SUBMITTED') {
+      throw new DomainError(409, 'payment_not_submitted', 'PAYMENT_NOT_SUBMITTED');
+    }
+    if (!paymentRejectionReasonValues.includes(reasonCode)) {
+      throw new DomainError(400, 'invalid rejection reason', 'INVALID_REJECTION_REASON');
+    }
+
+    const trimmedNotes = notes?.trim() || null;
+    const [paymentUpdated] = await tx
+      .update(payment)
+      .set({
+        status: 'REJECTED',
+        rejectedAt: new Date().toISOString(),
+        rejectionReasonCode: reasonCode,
+        rejectionReason: trimmedNotes,
+      })
+      .where(eq(payment.id, paymentId))
+      .returning();
+
+    if (!paymentUpdated) {
+      throw new Error('failed to reject payment');
+    }
+
+    return paymentUpdated;
+  });
+
+  await logAudit({
+    userId: adminUserId,
+    action: AuditActionType.UPDATE,
+    entityType: 'Payment',
+    entityId: updated.id,
+    oldValues: { status: 'SUBMITTED' },
+    newValues: { status: 'REJECTED', reasonCode, notes: updated.rejectionReason },
+  });
+
+  const reasonLabel = PAYMENT_REJECTION_LABELS[reasonCode];
+  const notesSuffix = updated.rejectionReason ? ` ${updated.rejectionReason}.` : '';
+  await createNotification({
+    recipientId: updated.userId,
+    type: NotificationType.PAYMENT_REJECTED,
+    title: 'Payment rejected',
+    body: `Your payment of ₹${updated.amount} was rejected: ${reasonLabel}.${notesSuffix} You can start a new payment.`,
+  });
+
+  return updated;
 }
 
 /** Institute UPI details handed to the app so it can build the UPI URI. */

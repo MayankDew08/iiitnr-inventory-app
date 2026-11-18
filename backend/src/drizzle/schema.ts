@@ -40,6 +40,13 @@ export const paymentStatus = pgEnum('PaymentStatus', [
   'VERIFIED',
   'REJECTED',
 ]);
+export const paymentRejectionReason = pgEnum('PaymentRejectionReason', [
+  'UTR_NOT_FOUND',
+  'AMOUNT_MISMATCH',
+  'PROOF_UNCLEAR',
+  'DUPLICATE_PAYMENT',
+  'OTHER',
+]);
 
 export const prismaMigrations = pgTable('_prisma_migrations', {
   id: varchar({ length: 36 }).primaryKey().notNull(),
@@ -340,6 +347,7 @@ export const payment = pgTable(
     rejectedAt: timestamp({ precision: 3, mode: 'string' }),
     verifiedByUserId: text(),
     rejectionReason: text(),
+    rejectionReasonCode: paymentRejectionReason(),
   },
   (table) => [
     index('Payment_userId_idx').using('btree', table.userId.asc().nullsLast().op('text_ops')),
