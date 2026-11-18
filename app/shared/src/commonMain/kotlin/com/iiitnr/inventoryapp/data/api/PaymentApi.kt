@@ -2,7 +2,12 @@ package com.iiitnr.inventoryapp.data.api
 
 import com.iiitnr.inventoryapp.data.models.CreatePaymentResponse
 import com.iiitnr.inventoryapp.data.models.MyPaymentsResponse
+import com.iiitnr.inventoryapp.data.models.Payment
 import com.iiitnr.inventoryapp.data.models.PaymentConfig
+import com.iiitnr.inventoryapp.data.models.PaymentDetail
+import com.iiitnr.inventoryapp.data.models.PaymentRejectionReason
+import com.iiitnr.inventoryapp.data.models.PendingPaymentsResponse
+import com.iiitnr.inventoryapp.data.models.RejectPaymentRequest
 import com.iiitnr.inventoryapp.data.models.SubmitPaymentResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -10,8 +15,11 @@ import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
 
 open class PaymentApi(
     private val client: HttpClient,
@@ -63,6 +71,50 @@ open class PaymentApi(
             .get("$baseUrl/payments/mine") {
                 bearer(token)
             }.body()
+
+    open suspend fun listPendingForAdmin(token: String): PendingPaymentsResponse =
+        client
+            .get("$baseUrl/payments/admin/pending") {
+                bearer(token)
+            }.body()
+
+    open suspend fun getPaymentForAdmin(
+        token: String,
+        paymentId: String,
+    ): PaymentDetail =
+        client
+            .get("$baseUrl/payments/admin/$paymentId") {
+                bearer(token)
+            }.body()
+
+    open suspend fun verifyPayment(
+        token: String,
+        paymentId: String,
+    ): Payment =
+        client
+            .post("$baseUrl/payments/admin/$paymentId/verify") {
+                bearer(token)
+            }.body<SubmitPaymentResponse>()
+            .payment
+
+    open suspend fun rejectPayment(
+        token: String,
+        paymentId: String,
+        reasonCode: PaymentRejectionReason,
+        notes: String?,
+    ): Payment =
+        client
+            .post("$baseUrl/payments/admin/$paymentId/reject") {
+                bearer(token)
+                contentType(ContentType.Application.Json)
+                setBody(
+                    RejectPaymentRequest(
+                        reasonCode = reasonCode,
+                        notes = notes?.trim()?.takeIf { it.isNotEmpty() },
+                    ),
+                )
+            }.body<SubmitPaymentResponse>()
+            .payment
 
     private fun proofExtension(mime: String): String =
         when (mime.lowercase()) {

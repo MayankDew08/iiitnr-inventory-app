@@ -38,6 +38,8 @@ import com.iiitnr.inventoryapp.ui.screens.ProfileScreen
 import com.iiitnr.inventoryapp.ui.screens.RegisterScreen
 import com.iiitnr.inventoryapp.ui.screens.RequestsScreen
 import com.iiitnr.inventoryapp.ui.screens.UserManagementScreen
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationDetailScreen
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationsScreen
 import com.iiitnr.inventoryapp.ui.screens.payment.PaymentScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
@@ -222,6 +224,8 @@ fun App(
                                 navController.navigate("audit_log")
                             }, onNavigateToUserManagement = {
                                 navController.navigate("user_management")
+                            }, onNavigateToPaymentVerifications = {
+                                navController.navigate("payment_verifications")
                             }, onNavigateToNotifications = {
                                 navController.navigate("notifications")
                             })
@@ -249,6 +253,29 @@ fun App(
                         composable("user_management") {
                             UserManagementScreen(
                                 onNavigateBack = { navController.popBackStack() },
+                            )
+                        }
+                        composable("payment_verifications") {
+                            PaymentVerificationsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onOpenPayment = { paymentId ->
+                                    navController.navigate("payment_verification/$paymentId")
+                                },
+                            )
+                        }
+                        composable("payment_verification/{paymentId}") { backStackEntry ->
+                            val paymentId =
+                                backStackEntry.arguments
+                                    ?.read { getStringOrNull("paymentId") }
+                                    .orEmpty()
+                            PaymentVerificationDetailScreen(
+                                paymentId = paymentId,
+                                onNavigateBack = { navController.popBackStack() },
+                                onResolved = {
+                                    navController.navigate("payment_verifications") {
+                                        popUpTo("payment_verifications") { inclusive = true }
+                                    }
+                                },
                             )
                         }
                     }

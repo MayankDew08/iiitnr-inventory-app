@@ -13,6 +13,8 @@ import com.iiitnr.inventoryapp.ui.screens.NotificationsViewModel
 import com.iiitnr.inventoryapp.ui.screens.ProfileViewModel
 import com.iiitnr.inventoryapp.ui.screens.RequestsViewModel
 import com.iiitnr.inventoryapp.ui.screens.UserManagementViewModel
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationDetailViewModel
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationsViewModel
 import com.iiitnr.inventoryapp.ui.screens.payment.PaymentViewModel
 import com.iiitnr.inventoryapp.utils.createIntentLauncher
 import org.koin.core.module.Module
@@ -46,6 +48,10 @@ val viewModelModule =
         viewModel { FinesAdminViewModel(get(), get()) }
         viewModel { FinesAdminStudentDetailViewModel(get(), get()) }
         viewModel { PaymentViewModel(get(), get(), get(), get()) }
+        viewModel { PaymentVerificationsViewModel(get(), get()) }
+        viewModel { (paymentId: String) ->
+            PaymentVerificationDetailViewModel(paymentId, get(), get())
+        }
         viewModel { ComponentsViewModel(get(), get(), get(), get(), getOrNull(), getOrNull()) }
         viewModel { AuthViewModel(get(), get()) }
         viewModel { ProfileViewModel(get(), get()) }

@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Receipt
 import androidx.compose.material.icons.outlined.School
@@ -87,6 +88,7 @@ fun ProfileScreen(
     onNavigateToRequests: () -> Unit = {},
     onNavigateToAuditLog: () -> Unit = {},
     onNavigateToUserManagement: () -> Unit = {},
+    onNavigateToPaymentVerifications: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     viewModel: ProfileViewModel = koinViewModel(),
     themeSettings: ThemeSettings = koinInject(),
@@ -137,6 +139,7 @@ fun ProfileScreen(
             onNavigateToNotifications = onNavigateToNotifications,
             onNavigateToAuditLog = onNavigateToAuditLog,
             onNavigateToUserManagement = onNavigateToUserManagement,
+            onNavigateToPaymentVerifications = onNavigateToPaymentVerifications,
         )
     }
 }
@@ -153,6 +156,7 @@ private fun ProfileBody(
     onNavigateToNotifications: () -> Unit,
     onNavigateToAuditLog: () -> Unit,
     onNavigateToUserManagement: () -> Unit,
+    onNavigateToPaymentVerifications: () -> Unit,
 ) {
     Box(
         modifier =
@@ -191,6 +195,7 @@ private fun ProfileBody(
                         onNavigateToNotifications = onNavigateToNotifications,
                         onNavigateToAuditLog = onNavigateToAuditLog,
                         onNavigateToUserManagement = onNavigateToUserManagement,
+                        onNavigateToPaymentVerifications = onNavigateToPaymentVerifications,
                     )
                 }
             }
@@ -434,6 +439,7 @@ private fun NavigationCard(
     onNavigateToNotifications: () -> Unit,
     onNavigateToAuditLog: () -> Unit,
     onNavigateToUserManagement: () -> Unit,
+    onNavigateToPaymentVerifications: () -> Unit,
 ) {
     val rows =
         buildList {
@@ -442,6 +448,15 @@ private fun NavigationCard(
             if (userRole == UserRole.ADMIN) {
                 add(NavRow("Audit Log", Icons.Outlined.History, onNavigateToAuditLog))
                 add(NavRow("Manage Users", Icons.Outlined.People, onNavigateToUserManagement))
+            }
+            if (userRole == UserRole.ADMIN || userRole == UserRole.LA) {
+                add(
+                    NavRow(
+                        "Payment Verifications",
+                        Icons.Outlined.Payments,
+                        onNavigateToPaymentVerifications,
+                    ),
+                )
             }
         }
 
@@ -498,6 +513,7 @@ fun ProfilePicture(
     modifier: Modifier = Modifier,
     size: Dp = 96.dp,
 ) {
+
     if (imageUrl != null) {
         val sanitizedUrl = imageUrl.replace("http://", "https://")
         AsyncImage(

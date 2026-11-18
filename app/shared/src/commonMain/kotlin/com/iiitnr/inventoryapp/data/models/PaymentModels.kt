@@ -11,6 +11,15 @@ enum class PaymentStatus {
 }
 
 @Serializable
+enum class PaymentRejectionReason {
+    UTR_NOT_FOUND,
+    AMOUNT_MISMATCH,
+    PROOF_UNCLEAR,
+    DUPLICATE_PAYMENT,
+    OTHER,
+}
+
+@Serializable
 data class PaymentAllocation(
     val requestId: String,
     val amount: Int,
@@ -25,6 +34,9 @@ data class Payment(
     val submittedAt: String? = null,
     val rejectedAt: String? = null,
     val rejectionReason: String? = null,
+    val rejectionReasonCode: PaymentRejectionReason? = null,
+    val verifiedAt: String? = null,
+    val verifiedByUserId: String? = null,
     val utr: String? = null,
     val proofImageUrl: String? = null,
     val allocations: List<PaymentAllocation> = emptyList(),
@@ -57,4 +69,56 @@ data class SubmitPaymentResponse(
 @Serializable
 data class MyPaymentsResponse(
     val payments: List<Payment>,
+)
+
+@Serializable
+data class PendingPaymentSummary(
+    val id: String,
+    val userId: String,
+    val studentName: String?,
+    val studentEmail: String,
+    val amount: Int,
+    val utr: String?,
+    val submittedAt: String?,
+)
+
+@Serializable
+data class PendingPaymentsResponse(
+    val payments: List<PendingPaymentSummary>,
+)
+
+@Serializable
+data class AllocationItem(
+    val componentName: String,
+    val quantity: Int,
+)
+
+@Serializable
+data class PaymentDetailAllocation(
+    val requestId: String,
+    val amount: Int,
+    val projectTitle: String,
+    val returnDueAt: String?,
+    val returnedAt: String?,
+    val items: List<AllocationItem>,
+)
+
+@Serializable
+data class StudentInfo(
+    val id: String,
+    val name: String?,
+    val email: String,
+)
+
+@Serializable
+data class PaymentDetail(
+    val payment: Payment,
+    val student: StudentInfo,
+    val allocations: List<PaymentDetailAllocation>,
+)
+
+@Serializable
+data class RejectPaymentRequest(
+    val reasonCode: PaymentRejectionReason,
+    val notes: String? = null,
 )
