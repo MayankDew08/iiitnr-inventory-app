@@ -1,31 +1,27 @@
 package com.iiitnr.inventoryapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -33,29 +29,32 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.iiitnr.inventoryapp.data.models.AuditLogEntry
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
-import com.iiitnr.inventoryapp.ui.components.common.InventoryTable
+import com.iiitnr.inventoryapp.ui.components.common.EmptyState
+import com.iiitnr.inventoryapp.ui.components.common.ErrorContent
+import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
 import com.iiitnr.inventoryapp.ui.components.common.PaginationBar
-import com.iiitnr.inventoryapp.ui.components.common.TableColumn
+import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
+import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.auditActionColor
-import com.iiitnr.inventoryapp.ui.theme.SemanticDanger
-import com.iiitnr.inventoryapp.ui.theme.SemanticSuccess
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
+import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 private val actionLabels =
@@ -80,30 +79,36 @@ private val allActions =
         "INVENTORY_ADJUST",
     )
 
-private val jsonParser = Json { ignoreUnknownKeys = true }
+private val auditActionOptions: List<String?> = listOf(null) + allActions
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuditLogScreen(
     onNavigateBack: () -> Unit,
     viewModel: AuditLogViewModel = koinViewModel(),
 ) {
-    val logs = viewModel.logs
-    val isLoading = viewModel.isLoading
-    val errorMessage = viewModel.errorMessage
-    val totalCount = viewModel.totalCount
-    val currentOffset = viewModel.currentOffset
-    val selectedAction = viewModel.selectedAction
-    val pageSize = viewModel.pageSize
+    ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
+        AuditLogContent(
+            onNavigateBack = onNavigateBack,
+            viewModel = viewModel,
+            isExpanded = widthClass == ScreenWidthClass.Expanded,
+        )
+    }
+}
 
+@Composable
+private fun AuditLogContent(
+    onNavigateBack: () -> Unit,
+    viewModel: AuditLogViewModel,
+    isExpanded: Boolean,
+) {
     var selectedEntry by remember { mutableStateOf<AuditLogEntry?>(null) }
-    val scope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             AppTopBar(
                 title = "Audit Log",
                 onNavigateBack = onNavigateBack,
+                maxContentWidth = if (isExpanded) 1280.dp else 1000.dp,
             )
         },
     ) { paddingValues ->
@@ -111,116 +116,238 @@ fun AuditLogScreen(
             modifier = Modifier.fillMaxSize().padding(paddingValues),
         ) {
             AuditFilterBar(
-                selectedAction = selectedAction,
+                selectedAction = viewModel.selectedAction,
                 onActionSelected = { viewModel.onActionSelected(it) },
+                maxContentWidth = if (isExpanded) 1280.dp else 1000.dp,
             )
 
             when {
-                isLoading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
+                viewModel.isLoading -> {
+                    LoadingIndicator()
                 }
 
-                errorMessage != null -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                errorMessage.orEmpty(),
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = { viewModel.loadLogs() }) { Text("Retry") }
-                        }
-                    }
+                viewModel.errorMessage != null -> {
+                    ErrorContent(
+                        errorMessage = viewModel.errorMessage.orEmpty(),
+                        onRetry = { viewModel.loadLogs() },
+                    )
                 }
 
-                logs.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            "No audit logs found",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                viewModel.logs.isEmpty() -> {
+                    EmptyState(message = "No audit logs found")
+                }
+
+                isExpanded -> {
+                    AuditLogMasterDetail(
+                        logs = viewModel.logs,
+                        selectedEntry = selectedEntry,
+                        onEntryClick = { selectedEntry = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AuditLogPager(viewModel = viewModel, maxContentWidth = 1280.dp)
                 }
 
                 else -> {
-                    LazyColumn(
+                    AuditLogList(
+                        logs = viewModel.logs,
+                        onEntryClick = { selectedEntry = it },
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(logs, key = { it.id }) { entry ->
-                            AuditLogCard(
-                                entry = entry,
-                                onClick = { selectedEntry = entry },
-                            )
-                        }
-                    }
-
-                    PaginationBar(
-                        currentOffset = currentOffset,
-                        pageSize = pageSize,
-                        totalCount = totalCount,
-                        onPrevious = { viewModel.onPreviousPage() },
-                        onNext = { viewModel.onNextPage() },
                     )
+                    AuditLogPager(viewModel = viewModel, maxContentWidth = 1000.dp)
                 }
             }
         }
     }
 
-    selectedEntry?.let { entry ->
-        AuditDetailDialog(entry = entry, onDismiss = { selectedEntry = null })
+    if (!isExpanded) {
+        selectedEntry?.let { entry ->
+            AuditDetailDialog(entry = entry, onDismiss = { selectedEntry = null })
+        }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Two-pane layout for wide windows: the log list on the left, the selected
+ * entry's full detail on the right instead of a modal dialog.
+ */
+@Composable
+private fun AuditLogMasterDetail(
+    logs: List<AuditLogEntry>,
+    selectedEntry: AuditLogEntry?,
+    onEntryClick: (AuditLogEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Keep a valid selection whenever the page or filter changes.
+    LaunchedEffect(logs) {
+        if (selectedEntry == null || logs.none { it.id == selectedEntry.id }) {
+            logs.firstOrNull()?.let(onEntryClick)
+        }
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Row(
+            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(modifier = Modifier.width(520.dp).fillMaxHeight()) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding =
+                        PaddingValues(
+                            start = 12.dp,
+                            top = 12.dp,
+                            end = 12.dp,
+                            bottom = 12.dp,
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(logs, key = { it.id }) { entry ->
+                        AuditLogCard(
+                            entry = entry,
+                            selected = entry.id == selectedEntry?.id,
+                            onClick = { onEntryClick(entry) },
+                        )
+                    }
+                }
+            }
+
+            AuditDetailPane(
+                entry = selectedEntry,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .wrapContentHeight(Alignment.Top)
+                        .padding(top = 16.dp, end = 16.dp),
+            )
+        }
+    }
+}
+
+/** Centred, width-capped log list so cards line up with the filter bar above. */
+@Composable
+private fun AuditLogList(
+    logs: List<AuditLogEntry>,
+    onEntryClick: (AuditLogEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        LazyColumn(
+            modifier = Modifier.widthIn(max = 1000.dp).fillMaxSize(),
+            contentPadding =
+                PaddingValues(
+                    start = 12.dp,
+                    top = 12.dp,
+                    end = 12.dp,
+                    bottom = 12.dp,
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(logs, key = { it.id }) { entry ->
+                AuditLogCard(
+                    entry = entry,
+                    onClick = { onEntryClick(entry) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuditLogPager(
+    viewModel: AuditLogViewModel,
+    maxContentWidth: Dp,
+) {
+    PaginationBar(
+        currentOffset = viewModel.currentOffset,
+        pageSize = viewModel.pageSize,
+        totalCount = viewModel.totalCount,
+        onPrevious = { viewModel.onPreviousPage() },
+        onNext = { viewModel.onNextPage() },
+        maxContentWidth = maxContentWidth,
+    )
+}
+
+/**
+ * Borderless filter pills, centred on wide windows and horizontally scrollable
+ * on narrow ones - the same treatment as the Components and Requests filters.
+ */
 @Composable
 private fun AuditFilterBar(
     selectedAction: String?,
     onActionSelected: (String?) -> Unit,
+    maxContentWidth: Dp,
 ) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        FilterChip(
-            selected = selectedAction == null,
-            onClick = { onActionSelected(null) },
-            label = { Text("All", fontSize = 12.sp) },
-        )
-        allActions.forEach { action ->
-            val color = auditActionColor(action) ?: MaterialTheme.colorScheme.primary
-            FilterChip(
-                selected = selectedAction == action,
-                onClick = {
-                    onActionSelected(if (selectedAction == action) null else action)
-                },
-                label = { Text(actionLabels[action] ?: action, fontSize = 12.sp) },
-                colors =
-                    FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = color.copy(alpha = 0.15f),
-                        selectedLabelColor = color,
-                    ),
-            )
+        LazyRow(
+            modifier = Modifier.widthIn(max = maxContentWidth).fillMaxWidth().padding(vertical = 2.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            items(auditActionOptions) { action ->
+                val isSelected = selectedAction == action
+                val selectedColor = action?.let { auditActionColor(it) } ?: MaterialTheme.colorScheme.primary
+                TextButton(
+                    onClick = {
+                        onActionSelected(if (isSelected) null else action)
+                    },
+                    modifier = Modifier.handCursor(),
+                ) {
+                    Text(
+                        text = action?.let { actionLabels[it] ?: it } ?: "All",
+                        color =
+                            if (isSelected) {
+                                selectedColor
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                    )
+                }
+            }
         }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
 @Composable
 private fun AuditLogCard(
     entry: AuditLogEntry,
+    selected: Boolean = false,
     onClick: () -> Unit,
 ) {
     val actionColor = auditActionColor(entry.action) ?: MaterialTheme.colorScheme.primary
-    val cardBackground = actionColor.copy(alpha = 0.12f)
+    val isDark = LocalIsDarkTheme.current
+    // Blend the action hue onto the card surface: a raw alpha tint over a light
+    // surface reads muddy, so light mode gets a much smaller fraction and no shadow.
+    val cardBackground =
+        lerp(
+            start = MaterialTheme.colorScheme.surfaceContainerLow,
+            stop = actionColor,
+            fraction = if (isDark) 0.14f else 0.07f,
+        )
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        modifier = Modifier.fillMaxWidth().handCursor().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 1.dp else 0.dp),
         shape = RoundedCornerShape(12.dp),
+        // Selection reuses the action hue so a purple/green/red audit card keeps
+        // its own color instead of getting a clashing primary border.
+        border =
+            if (selected) {
+                BorderStroke(2.dp, actionColor)
+            } else {
+                BorderStroke(1.dp, actionColor.copy(alpha = 0.35f))
+            },
         colors =
             CardDefaults.cardColors(
                 containerColor = cardBackground,
@@ -228,271 +355,88 @@ private fun AuditLogCard(
             ),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // Action badge
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = actionColor.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = actionLabels[entry.action] ?: entry.action,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        color = actionColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                // Timestamp
-                Text(
-                    text = formatAuditTimestamp(entry.createdAt),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            AuditLogCardHeader(entry = entry, actionColor = actionColor)
             Spacer(Modifier.height(8.dp))
-
-            // Actor
-            Text(
-                text = entry.userName ?: entry.userEmail ?: "System",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (entry.userName != null && entry.userEmail != null) {
-                Text(
-                    text = entry.userEmail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            // Target
-            if (entry.entityType != null) {
-                Spacer(Modifier.height(4.dp))
-                Row {
-                    Text(
-                        text = entry.entityType,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    if (entry.entityId != null) {
-                        Text(
-                            text = " #${entry.entityId.take(8)}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
+            AuditEntryDetails(entry = entry)
         }
     }
 }
 
 @Composable
-private fun AuditDetailDialog(
+private fun AuditLogCardHeader(
     entry: AuditLogEntry,
-    onDismiss: () -> Unit,
+    actionColor: Color,
 ) {
-    val actionColor = auditActionColor(entry.action) ?: MaterialTheme.colorScheme.primary
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = actionColor.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = actionLabels[entry.action] ?: entry.action,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        color = actionColor,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Audit Detail",
-                    style = MaterialTheme.typography.titleMedium,
-                )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                DetailRow("Actor", entry.userName ?: entry.userEmail ?: "System")
-                if (entry.userName != null && entry.userEmail != null) {
-                    DetailRow("Email", entry.userEmail)
-                }
-                DetailRow("Timestamp", entry.createdAt)
-                if (entry.entityType != null) {
-                    DetailRow("Entity Type", entry.entityType)
-                }
-                if (entry.entityId != null) {
-                    DetailRow("Entity ID", entry.entityId)
-                }
-                if (entry.ipAddress != null) {
-                    DetailRow("IP Address", entry.ipAddress)
-                }
-                if (entry.userAgent != null) {
-                    DetailRow("User Agent", entry.userAgent)
-                }
-
-                // Diff viewer for old/new values
-                if (entry.oldValues != null || entry.newValues != null) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    Text(
-                        "Changes",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    DiffViewer(
-                        oldJson = entry.oldValues,
-                        newJson = entry.newValues,
-                    )
-                }
-
-                if (entry.metadata != null) {
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    DetailRow("Metadata", entry.metadata)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
-        },
-    )
-}
-
-@Composable
-private fun DetailRow(
-    label: String,
-    value: String,
-) {
-    Column {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AuditActionBadge(action = entry.action, actionColor = actionColor, fontSize = 12.sp)
         Text(
-            text = label,
+            text = formatAuditTimestamp(entry.createdAt),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 11.sp,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
         )
     }
 }
 
 @Composable
-private fun DiffViewer(
-    oldJson: String?,
-    newJson: String?,
+internal fun AuditActionBadge(
+    action: String,
+    actionColor: Color,
+    fontSize: TextUnit,
 ) {
-    val oldMap = parseJsonMap(oldJson)
-    val newMap = parseJsonMap(newJson)
-    val allKeys = (oldMap.keys + newMap.keys).distinct().sorted()
-
-    if (allKeys.isEmpty()) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = actionColor.copy(alpha = 0.12f),
+    ) {
         Text(
-            "No structured changes available",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            text = actionLabels[action] ?: action,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            color = actionColor,
+            fontSize = fontSize,
+            fontWeight = FontWeight.SemiBold,
         )
-        return
-    }
-
-    val changedKeys = allKeys.filter { oldMap[it] != newMap[it] }
-
-    if (changedKeys.isEmpty()) {
-        Text(
-            "No values were changed",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        return
-    }
-
-    Column {
-        InventoryTable(
-            items = changedKeys,
-            columns =
-                listOf(
-                    TableColumn(
-                        header = "Field",
-                        weight = 0.35f,
-                        content = { key ->
-                            Text(
-                                text = key,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        },
-                    ),
-                    TableColumn(
-                        header = "Changes",
-                        weight = 0.65f,
-                        content = { key ->
-                            val oldVal = oldMap[key]
-                            val newVal = newMap[key]
-                            Column {
-                                if (oldVal != null) {
-                                    Text(
-                                        text = "- $oldVal",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = SemanticDanger,
-                                        maxLines = 5,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                if (newVal != null) {
-                                    Text(
-                                        text = "+ $newVal",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = SemanticSuccess,
-                                        maxLines = 5,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                            }
-                        },
-                    ),
-                ),
-        )
-
-        val unchangedCount =
-            allKeys.count { oldMap[it] == newMap[it] && oldMap.containsKey(it) && newMap.containsKey(it) }
-        if (unchangedCount > 0) {
-            Text(
-                text = "$unchangedCount unchanged field(s)",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-            )
-        }
     }
 }
 
-private fun parseJsonMap(json: String?): Map<String, String> {
-    if (json.isNullOrBlank()) return emptyMap()
-    return try {
-        val obj = jsonParser.decodeFromString<JsonObject>(json)
-        obj.mapValues { (_, v) -> v.jsonPrimitive.content }
-    } catch (_: Exception) {
-        emptyMap()
+/** Actor, email and target entity of an entry. */
+@Composable
+private fun AuditEntryDetails(entry: AuditLogEntry) {
+    Text(
+        text = entry.userName ?: entry.userEmail ?: "System",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
+    if (entry.userName != null && entry.userEmail != null) {
+        Text(
+            text = entry.userEmail,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+
+    if (entry.entityType != null) {
+        Spacer(Modifier.height(4.dp))
+        Row {
+            Text(
+                text = entry.entityType,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (entry.entityId != null) {
+                Text(
+                    text = " #${entry.entityId.take(8)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

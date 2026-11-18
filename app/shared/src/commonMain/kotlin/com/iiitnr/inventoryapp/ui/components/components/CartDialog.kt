@@ -14,8 +14,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -23,6 +23,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -40,6 +41,7 @@ import com.iiitnr.inventoryapp.data.models.Component
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.ui.components.common.InventoryTable
 import com.iiitnr.inventoryapp.ui.components.common.TableColumn
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 
 @Composable
 fun CartDialog(
@@ -64,7 +66,7 @@ fun CartDialog(
             components.find { it.id == componentId }?.let { it to quantity }
         }
 
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Shopping Cart") }, text = {
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("New Request") }, text = {
         Column(
             modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         ) {
@@ -91,7 +93,7 @@ fun CartDialog(
                                             fontWeight = FontWeight.Medium,
                                         )
                                         Text(
-                                            text = "Avl: ${component.availableQuantity}",
+                                            text = "${component.availableQuantity} available",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -102,6 +104,8 @@ fun CartDialog(
                                 header = "Quantity",
                                 weight = 0.45f,
                                 alignment = Alignment.CenterEnd,
+                                // Keeps "QUANTITY" above "- qty +" instead of the delete icon.
+                                headerTrailingSpace = 32.dp,
                                 content = { (component, quantity) ->
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -109,7 +113,7 @@ fun CartDialog(
                                     ) {
                                         IconButton(
                                             onClick = { onUpdateQuantity(component, -1) },
-                                            modifier = Modifier.size(32.dp),
+                                            modifier = Modifier.size(32.dp).handCursor(),
                                         ) {
                                             Icon(
                                                 Icons.Default.Remove,
@@ -125,7 +129,7 @@ fun CartDialog(
                                         IconButton(
                                             onClick = { onUpdateQuantity(component, 1) },
                                             enabled = quantity < component.availableQuantity,
-                                            modifier = Modifier.size(32.dp),
+                                            modifier = Modifier.size(32.dp).handCursor(),
                                         ) {
                                             Icon(
                                                 Icons.Default.Add,
@@ -135,7 +139,7 @@ fun CartDialog(
                                         }
                                         IconButton(
                                             onClick = { onRemoveItem(component) },
-                                            modifier = Modifier.size(32.dp),
+                                            modifier = Modifier.size(32.dp).handCursor(),
                                         ) {
                                             Icon(
                                                 Icons.Default.Delete,
@@ -182,12 +186,16 @@ fun CartDialog(
             }
         }
     }, confirmButton = {
-        TextButton(
+        Button(
             onClick = onSubmit,
             enabled = !isSubmitting && cartItems.isNotEmpty() && selectedFacultyId != null && projectTitle.isNotBlank(),
         ) {
             if (isSubmitting) {
-                CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    color = LocalContentColor.current,
+                    strokeWidth = 2.dp,
+                )
             } else {
                 Text("Submit Request")
             }
@@ -233,9 +241,10 @@ private fun FacultyDropdownField(
                 }
             },
         )
-        DropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.exposedDropdownSize(matchAnchorWidth = true),
         ) {
             facultyOptions.forEach { faculty ->
                 DropdownMenuItem(text = { Text(faculty.name ?: faculty.email) }, onClick = {

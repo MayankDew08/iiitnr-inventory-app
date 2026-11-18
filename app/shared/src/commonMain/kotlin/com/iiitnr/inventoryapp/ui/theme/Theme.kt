@@ -8,11 +8,53 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.iiitnr.inventoryapp.data.storage.ThemeSettings
 import com.iiitnr.inventoryapp.utils.LocalToday
 import com.iiitnr.inventoryapp.utils.currentSystemDate
+import org.koin.compose.koinInject
+
+/**
+ * User-selectable theme preference. [SYSTEM] follows the OS, the other two
+ * pin light/dark regardless of the platform setting.
+ */
+enum class ThemeMode(
+    val label: String,
+) {
+    SYSTEM("Auto"),
+    LIGHT("Light"),
+    DARK("Dark"),
+}
+
+/**
+ * The resolved dark/light decision for the current theme, exposed so widgets
+ * that need a plain boolean (status chips, card tints) follow a manual override
+ * instead of re-reading the system setting.
+ */
+val LocalIsDarkTheme = staticCompositionLocalOf { false }
+
+/** Resolves this mode against the platform setting. */
+@Composable
+fun ThemeMode.resolveIsDark(): Boolean =
+    when (this) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+
+/**
+ * Observes the persisted [ThemeMode]. Kept in `shared` so platform entry points
+ * do not need a Koin Compose dependency just to read the theme preference.
+ */
+@Composable
+fun rememberThemeMode(themeSettings: ThemeSettings = koinInject()): ThemeMode {
+    val themeMode by themeSettings.themeMode.collectAsState()
+    return themeMode
+}
 
 @Immutable
 data class InventoryColors(
@@ -113,8 +155,11 @@ val LightColorScheme =
     )
 
 @Composable
-fun AppTheme(content: @Composable () -> Unit) {
-    val darkTheme = isSystemInDarkTheme()
+fun AppTheme(
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    content: @Composable () -> Unit,
+) {
+    val darkTheme = themeMode.resolveIsDark()
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val inventoryColors = if (darkTheme) DarkInventoryColors else LightInventoryColors
     val today =
@@ -124,6 +169,7 @@ fun AppTheme(content: @Composable () -> Unit) {
 
     CompositionLocalProvider(
         LocalInventoryColors provides inventoryColors,
+        LocalIsDarkTheme provides darkTheme,
         LocalToday provides today,
     ) {
         MaterialTheme(

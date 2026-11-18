@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.components.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,19 +15,29 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ImageNotSupported
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.SettingsInputComponent
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,6 +57,7 @@ import coil3.compose.AsyncImage
 import coil3.compose.SubcomposeAsyncImage
 import com.iiitnr.inventoryapp.data.models.Component
 import com.iiitnr.inventoryapp.ui.components.common.InfoChip
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.theme.inventoryColors
 
 @Composable
@@ -77,7 +90,8 @@ fun ComponentCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
         colors =
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -93,6 +107,7 @@ fun ComponentCard(
             ) {
                 ComponentImage(
                     imageUrl = component.imageUrl,
+                    category = component.category,
                     modifier = Modifier.size(64.dp),
                     onClick = component.imageUrl?.let { { enlargedImageUrl = it } },
                 )
@@ -132,21 +147,10 @@ fun ComponentCard(
                         }
                     }
                     if (cartQuantity == 0) {
-                        IconButton(
-                            onClick = { onAddToCart?.invoke() },
+                        AddToRequestButton(
                             enabled = component.availableQuantity > 0,
-                        ) {
-                            Icon(
-                                Icons.Default.AddShoppingCart,
-                                contentDescription = "Add to cart",
-                                tint =
-                                    if (component.availableQuantity > 0) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.outline
-                                    },
-                            )
-                        }
+                            onClick = { onAddToCart?.invoke() },
+                        )
                     } else {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
@@ -181,7 +185,6 @@ fun ComponentCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 val available = component.availableQuantity
                 val total = component.totalQuantity
@@ -205,25 +208,68 @@ fun ComponentCard(
                             )
                     }
 
-                if (!component.category.isNullOrBlank()) {
+                // Three fixed slots keep Quantity centred even when the
+                // component has no category or location.
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    val category = component.category
+                    if (!category.isNullOrBlank()) {
+                        InfoChip(
+                            label = "Category",
+                            primary = category.replace('_', ' '),
+                        )
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     InfoChip(
-                        label = "Category",
-                        primary = component.category.replace('_', ' '),
+                        label = "Quantity",
+                        primary = available.toString(),
+                        secondary = total.toString(),
+                        color = quantityColor,
                     )
                 }
-                InfoChip(
-                    label = "Quantity",
-                    primary = available.toString(),
-                    secondary = total.toString(),
-                    color = quantityColor,
-                )
-                if (!component.location.isNullOrBlank()) {
-                    InfoChip(
-                        label = "Location",
-                        component.location.replace('_', ' '),
-                    )
+
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    val location = component.location
+                    if (!location.isNullOrBlank()) {
+                        InfoChip(
+                            label = "Location",
+                            primary = location.replace('_', ' '),
+                        )
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Add-to-request control with a hover hint. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddToRequestButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
+        tooltip = { PlainTooltip { Text("Add to request") } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.handCursor(),
+        ) {
+            Icon(
+                Icons.AutoMirrored.Outlined.PlaylistAdd,
+                contentDescription = "Add to request",
+                tint =
+                    if (enabled) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    },
+            )
         }
     }
 }
@@ -232,33 +278,15 @@ fun ComponentCard(
 internal fun ComponentImage(
     imageUrl: String?,
     modifier: Modifier = Modifier,
+    category: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
     val shape = RoundedCornerShape(8.dp)
-    val placeholderContent = @Composable {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ImageNotSupported,
-                    contentDescription = null,
-                    modifier = Modifier.size(28.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
     if (!imageUrl.isNullOrBlank()) {
-        val shape = RoundedCornerShape(8.dp)
         val sanitizedUrl = imageUrl.replace("http://", "https://")
         val imageModifier =
             if (onClick != null) {
-                modifier.clip(shape).clickable(onClick = onClick)
+                modifier.clip(shape).handCursor().clickable(onClick = onClick)
             } else {
                 modifier.clip(shape)
             }
@@ -267,15 +295,49 @@ internal fun ComponentImage(
             contentDescription = "Component image",
             modifier = imageModifier,
             contentScale = ContentScale.Crop,
-            loading = { placeholderContent() },
-            error = { placeholderContent() },
+            loading = { ComponentImagePlaceholder(category = category) },
+            error = { ComponentImagePlaceholder(category = category) },
         )
     } else {
-        Surface(
+        ComponentImagePlaceholder(
+            category = category,
             modifier = modifier.clip(shape),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+        )
+    }
+}
+
+/**
+ * Category-aware stand-in, used both for a missing URL and for a failed load so
+ * a broken image never shows a broken-image glyph.
+ */
+@Composable
+private fun ComponentImagePlaceholder(
+    category: String?,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
         ) {
-            placeholderContent()
+            Icon(
+                imageVector = categoryIcon(category),
+                contentDescription = null,
+                modifier = Modifier.size(28.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
+
+private fun categoryIcon(category: String?): ImageVector =
+    when (category?.lowercase()) {
+        "sensors" -> Icons.Default.Sensors
+        "actuators" -> Icons.Default.Build
+        "microcontrollers" -> Icons.Default.Memory
+        "microprocessors" -> Icons.Default.SettingsInputComponent
+        else -> Icons.Default.Inventory2
+    }

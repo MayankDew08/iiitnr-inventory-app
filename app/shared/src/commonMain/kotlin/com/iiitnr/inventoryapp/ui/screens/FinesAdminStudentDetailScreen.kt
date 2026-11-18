@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -19,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
 import com.iiitnr.inventoryapp.utils.currentToday
 import com.iiitnr.inventoryapp.utils.formatDisplayDate
@@ -57,6 +63,7 @@ fun FinesAdminStudentDetailScreen(
             AppTopBar(
                 title = viewModel.studentName.ifEmpty { "Student" },
                 onNavigateBack = onNavigateBack,
+                maxContentWidth = 900.dp,
             )
         },
     ) { paddingValues ->
@@ -106,33 +113,168 @@ private fun StudentFinesContent(
     today: LocalDate,
     onRequestClick: (Request) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(modifier = Modifier.widthIn(max = 900.dp).fillMaxSize()) {
+            item {
+                Text(
+                    text = "Overdue requests",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                )
+            }
+
+            items(fines, key = { it.id }) { request ->
+                AdminFineCard(
+                    request = request,
+                    today = today,
+                    onClick = onRequestClick,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Spacer(Modifier.height(16.dp))
+            }
+
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = "Total",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = "₹$total",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+/**
+ * Inline variant of [StudentFinesContent] used by the two-pane (Expanded)
+ * outstanding-fines layout on wide windows.
+ */
+@Composable
+internal fun StudentFinesPane(
+    userId: String,
+    studentName: String,
+    requestCount: Int,
+    onRequestClick: (Request) -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: FinesAdminStudentDetailViewModel = koinViewModel(),
+) {
+    var requestedUserId by remember { mutableStateOf<String?>(null) }
+
+    // Loads the selected student, and retries once an in-flight load finishes so
+    // switching students mid-fetch never leaves the pane on the previous one.
+    LaunchedEffect(userId, viewModel.isLoading) {
+        if (!viewModel.isLoading && requestedUserId != userId) {
+            requestedUserId = userId
+            viewModel.load(userId)
+        }
+    }
+
+    Card(
+        modifier = modifier,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+        ) {
             Text(
-                text = "Overdue requests",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
+                text = studentName.ifBlank { "Student" },
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
             )
-        }
-
-        items(fines, key = { it.id }) { request ->
-            AdminFineCard(request = request, today = today, onClick = onRequestClick)
-        }
-
-        item {
+            Text(
+                text = "$requestCount overdue request${if (requestCount == 1) "" else "s"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
+
+            StudentFinesPaneBody(
+                userId = userId,
+                viewModel = viewModel,
+                onRequestClick = onRequestClick,
             )
-            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun StudentFinesPaneBody(
+    userId: String,
+    viewModel: FinesAdminStudentDetailViewModel,
+    onRequestClick: (Request) -> Unit,
+) {
+    val today = currentToday
+
+    when {
+        viewModel.isLoading -> {
+            Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
         }
 
-        item {
+        viewModel.errorMessage != null -> {
+            FinesPaneErrorState(
+                message = viewModel.errorMessage.orEmpty(),
+                onRetry = { viewModel.load(userId) },
+            )
+        }
+
+        viewModel.fines.isEmpty() -> {
+            Text(
+                text = "No outstanding fines for this student.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(vertical = 12.dp),
+            )
+        }
+
+        else -> {
+            viewModel.fines.forEach { request ->
+                AdminFineCard(
+                    request = request,
+                    today = today,
+                    onClick = onRequestClick,
+                    modifier = Modifier.padding(vertical = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Spacer(Modifier.height(12.dp))
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "Total",
@@ -140,13 +282,36 @@ private fun StudentFinesContent(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "₹$total",
-                    style = MaterialTheme.typography.headlineMedium,
+                    text = "₹${viewModel.total}",
+                    style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
-            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun FinesPaneErrorState(
+    message: String,
+    onRetry: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(
+            text = "Couldn't load this student's fines.",
+            style = MaterialTheme.typography.titleSmall,
+        )
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(
+            onClick = onRetry,
+            modifier = Modifier.handCursor(),
+        ) {
+            Text("Try again")
         }
     }
 }
@@ -156,12 +321,14 @@ private fun AdminFineCard(
     request: Request,
     today: LocalDate,
     onClick: (Request) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Card(
         onClick = { onClick(request) },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(),
-        elevation = CardDefaults.cardElevation(),
+        modifier = modifier.fillMaxWidth().handCursor(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(

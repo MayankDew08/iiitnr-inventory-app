@@ -35,6 +35,7 @@ fun IIITNRInventoryAppTheme(
 
     CompositionLocalProvider(
         LocalInventoryColors provides inventoryColors,
+        LocalIsDarkTheme provides darkTheme,
         LocalToday provides today,
     ) {
         MaterialTheme(

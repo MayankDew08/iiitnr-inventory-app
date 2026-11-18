@@ -15,12 +15,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 data class TableColumn<T>(
     val header: String,
     val weight: Float = 1f,
     val alignment: Alignment = Alignment.CenterStart,
+    /**
+     * Space reserved after a trailing-aligned header, so it can sit above a value
+     * column that has a trailing action button.
+     */
+    val headerTrailingSpace: Dp = 0.dp,
     val content: @Composable (T) -> Unit,
 )
 
@@ -68,6 +74,7 @@ private fun <T> TableContent(
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = column.headerTrailingSpace),
                     )
                 }
             }

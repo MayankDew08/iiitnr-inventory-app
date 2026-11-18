@@ -1,14 +1,19 @@
 package com.iiitnr.inventoryapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -24,11 +29,21 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
+import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
+import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -37,42 +52,64 @@ fun FinesAdminScreen(
     onStudentClick: (userId: String) -> Unit,
     viewModel: FinesAdminViewModel = koinViewModel(),
 ) {
-    Scaffold(
-        topBar = {
-            AppTopBar(
-                title = "Outstanding fines",
-                onNavigateBack = onNavigateBack,
-            )
-        },
-    ) { paddingValues ->
-        Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when {
-                viewModel.isLoading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+    var selectedRequest by remember { mutableStateOf<Request?>(null) }
+
+    ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
+        val isExpanded = widthClass == ScreenWidthClass.Expanded
+
+        Scaffold(
+            topBar = {
+                AppTopBar(
+                    title = "Outstanding fines",
+                    onNavigateBack = onNavigateBack,
+                    maxContentWidth = if (isExpanded) 1280.dp else 900.dp,
+                )
+            },
+        ) { paddingValues ->
+            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                when {
+                    viewModel.isLoading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
                     }
-                }
 
-                viewModel.errorMessage != null -> {
-                    FinesAdminErrorState(
-                        detail = viewModel.errorMessage,
-                        onRetry = { viewModel.load() },
-                    )
-                }
+                    viewModel.errorMessage != null -> {
+                        FinesAdminErrorState(
+                            detail = viewModel.errorMessage,
+                            onRetry = { viewModel.load() },
+                        )
+                    }
 
-                viewModel.students.isEmpty() -> {
-                    FinesAdminEmptyState()
-                }
+                    viewModel.students.isEmpty() -> {
+                        FinesAdminEmptyState()
+                    }
 
-                else -> {
-                    FinesAdminContent(
-                        students = viewModel.students,
-                        grandTotal = viewModel.grandTotal,
-                        onStudentClick = onStudentClick,
-                    )
+                    isExpanded -> {
+                        FinesAdminMasterDetail(
+                            students = viewModel.students,
+                            grandTotal = viewModel.grandTotal,
+                            onRequestClick = { selectedRequest = it },
+                        )
+                    }
+
+                    else -> {
+                        FinesAdminContent(
+                            students = viewModel.students,
+                            grandTotal = viewModel.grandTotal,
+                            onStudentClick = onStudentClick,
+                        )
+                    }
                 }
             }
         }
+    }
+
+    selectedRequest?.let { request ->
+        RequestDetailDialog(
+            request = request,
+            onDismiss = { selectedRequest = null },
+        )
     }
 }
 
@@ -82,58 +119,140 @@ private fun FinesAdminContent(
     grandTotal: Int,
     onStudentClick: (String) -> Unit,
 ) {
-    LazyColumn(modifier = Modifier.fillMaxSize()) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        text = "${students.size} student${if (students.size == 1) "" else "s"}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "owe fines",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        LazyColumn(modifier = Modifier.widthIn(max = 900.dp).fillMaxSize()) {
+            item { FinesAdminSummary(studentCount = students.size, grandTotal = grandTotal) }
+
+            item {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            items(students, key = { it.userId }) { student ->
+                StudentFineCard(student = student, onClick = onStudentClick)
+            }
+        }
+    }
+}
+
+/**
+ * Two-pane layout for wide windows: the outstanding-fines list on the left and
+ * the selected student's overdue requests inline on the right.
+ */
+@Composable
+private fun FinesAdminMasterDetail(
+    students: List<StudentWithFines>,
+    grandTotal: Int,
+    onRequestClick: (Request) -> Unit,
+) {
+    var selectedUserId by remember { mutableStateOf<String?>(null) }
+
+    // Keep a valid selection whenever the student list changes.
+    LaunchedEffect(students) {
+        if (selectedUserId == null || students.none { it.userId == selectedUserId }) {
+            selectedUserId = students.firstOrNull()?.userId
+        }
+    }
+
+    val selectedStudent = students.firstOrNull { it.userId == selectedUserId }
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Row(
+            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(modifier = Modifier.width(420.dp).fillMaxHeight()) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item { FinesAdminSummary(studentCount = students.size, grandTotal = grandTotal) }
+
+                    item {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 16.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+
+                    items(students, key = { it.userId }) { student ->
+                        StudentFineCard(
+                            student = student,
+                            selected = student.userId == selectedUserId,
+                            onClick = { selectedUserId = it },
+                        )
+                    }
                 }
-                Text(
-                    text = "₹$grandTotal",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+            }
+
+            if (selectedStudent != null) {
+                StudentFinesPane(
+                    userId = selectedStudent.userId,
+                    studentName = selectedStudent.studentName,
+                    requestCount = selectedStudent.requestCount,
+                    onRequestClick = onRequestClick,
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .wrapContentHeight(Alignment.Top)
+                            .padding(top = 16.dp, end = 16.dp),
                 )
             }
         }
+    }
+}
 
-        item {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
+@Composable
+private fun FinesAdminSummary(
+    studentCount: Int,
+    grandTotal: Int,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(
+                text = "$studentCount student${if (studentCount == 1) "" else "s"}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
-            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "owe fines",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-
-        items(students, key = { it.userId }) { student ->
-            StudentFineCard(student = student, onClick = onStudentClick)
-        }
+        Text(
+            text = "₹$grandTotal",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
 }
 
 @Composable
 private fun StudentFineCard(
     student: StudentWithFines,
+    selected: Boolean = false,
     onClick: (String) -> Unit,
 ) {
     Card(
         onClick = { onClick(student.userId) },
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-        colors = CardDefaults.cardColors(),
-        elevation = CardDefaults.cardElevation(),
+        modifier = Modifier.fillMaxWidth().handCursor().padding(horizontal = 16.dp, vertical = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border =
+            BorderStroke(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            ),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),

@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAddCheck
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +27,8 @@ fun CartFAB(
     FloatingActionButton(onClick = onClick, modifier = modifier) {
         Box {
             Icon(
-                Icons.Default.ShoppingCart,
-                contentDescription = "View Cart",
+                Icons.AutoMirrored.Outlined.PlaylistAddCheck,
+                contentDescription = "View request",
             )
             Box(
                 modifier =

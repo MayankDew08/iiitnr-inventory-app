@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -25,6 +28,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -39,6 +43,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -49,10 +54,32 @@ import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.PaginationBar
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.common.userRoleColor
+import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 private val allRoles: List<UserRole> = UserRole.ALL
+
+private val roleFilterOptions: List<UserRole?> =
+    listOf(
+        null,
+        UserRole.PENDING,
+        UserRole.STUDENT,
+        UserRole.FACULTY,
+        UserRole.LA,
+        UserRole.ADMIN,
+    )
+
+private fun roleFilterLabel(role: UserRole?): String =
+    when (role) {
+        null -> "All"
+        UserRole.PENDING -> "Pending"
+        UserRole.STUDENT -> "Student"
+        UserRole.FACULTY -> "Faculty"
+        UserRole.LA -> "LA"
+        UserRole.ADMIN -> "Admin"
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +87,7 @@ fun UserManagementScreen(
     onNavigateBack: () -> Unit,
     viewModel: UserManagementViewModel = koinViewModel(),
 ) {
-    val users = viewModel.users
+    val users = viewModel.filteredUsers
     val isLoading = viewModel.isLoading
     val errorMessage = viewModel.errorMessage
     val totalCount = viewModel.totalCount
@@ -76,17 +103,18 @@ fun UserManagementScreen(
             AppTopBar(
                 title = "User Management",
                 onNavigateBack = onNavigateBack,
+                maxContentWidth = 1000.dp,
             )
         },
     ) { paddingValues ->
         Column(
             modifier = Modifier.fillMaxSize().padding(paddingValues),
         ) {
-            SearchBar(
+            UserManagementHeader(
                 searchQuery = searchQuery,
                 onSearchQueryChange = { viewModel.onSearchQueryChange(it) },
-                placeholder = "Search users...",
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                roleFilter = viewModel.roleFilter,
+                onRoleFilterChange = { viewModel.onRoleFilterChange(it) },
             )
 
             when {
@@ -119,16 +147,27 @@ fun UserManagementScreen(
                 }
 
                 else -> {
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    Box(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentAlignment = Alignment.TopCenter,
                     ) {
-                        items(users, key = { it.id }) { user ->
-                            UserCard(
-                                user = user,
-                                onClick = { editingUser = user },
-                            )
+                        LazyColumn(
+                            modifier = Modifier.widthIn(max = 1000.dp).fillMaxSize(),
+                            contentPadding =
+                                PaddingValues(
+                                    start = 12.dp,
+                                    top = 12.dp,
+                                    end = 12.dp,
+                                    bottom = 12.dp,
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            items(users, key = { it.id }) { user ->
+                                UserCard(
+                                    user = user,
+                                    onClick = { editingUser = user },
+                                )
+                            }
                         }
                     }
 
@@ -138,6 +177,7 @@ fun UserManagementScreen(
                         totalCount = totalCount,
                         onPrevious = { viewModel.onPreviousPage() },
                         onNext = { viewModel.onNextPage() },
+                        maxContentWidth = 1000.dp,
                     )
                 }
             }
@@ -165,18 +205,88 @@ fun UserManagementScreen(
     }
 }
 
+/**
+ * Search + role pills live in a centred, width-capped header above a divider so
+ * cards scrolling underneath never clip right under the search field.
+ */
+@Composable
+private fun UserManagementHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    roleFilter: UserRole?,
+    onRoleFilterChange: (UserRole?) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .widthIn(max = 1000.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SearchBar(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onSearchQueryChange,
+                placeholder = "Search users...",
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            LazyRow(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                contentPadding = PaddingValues(0.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                items(roleFilterOptions) { role ->
+                    val isSelected = roleFilter == role
+                    val selectedColor = role?.let { userRoleColor(it) } ?: MaterialTheme.colorScheme.primary
+                    TextButton(
+                        onClick = { onRoleFilterChange(role) },
+                        modifier = Modifier.handCursor(),
+                    ) {
+                        Text(
+                            text = roleFilterLabel(role),
+                            color =
+                                if (isSelected) {
+                                    selectedColor
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                }
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
 @Composable
 private fun UserCard(
     user: User,
     onClick: () -> Unit,
 ) {
     val roleColor = userRoleColor(user.role)
-    val cardBackground = roleColor.copy(alpha = 0.12f)
+    val isDark = LocalIsDarkTheme.current
+    // Blend the role hue onto the card surface: a raw alpha tint over a light
+    // surface reads muddy, so light mode gets a much smaller fraction and no shadow.
+    val cardBackground =
+        lerp(
+            start = MaterialTheme.colorScheme.surfaceContainerLow,
+            stop = roleColor,
+            fraction = if (isDark) 0.14f else 0.07f,
+        )
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+        modifier = Modifier.fillMaxWidth().handCursor().clickable(onClick = onClick),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isDark) 1.dp else 0.dp),
         shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, roleColor.copy(alpha = 0.35f)),
         colors =
             CardDefaults.cardColors(
                 containerColor = cardBackground,

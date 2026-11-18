@@ -29,6 +29,7 @@ fun RequestsList(
     onCardClick: (Request) -> Unit,
     isFaculty: Boolean = false,
     modifier: Modifier = Modifier,
+    selectedRequestId: String? = null,
 ) {
     val state = rememberLazyListState()
     Box(modifier = modifier) {
@@ -51,6 +52,7 @@ fun RequestsList(
                     onShowQr = onShowQr,
                     onCardClick = onCardClick,
                     isFaculty = isFaculty,
+                    isSelected = request.id == selectedRequestId,
                 )
             }
         }

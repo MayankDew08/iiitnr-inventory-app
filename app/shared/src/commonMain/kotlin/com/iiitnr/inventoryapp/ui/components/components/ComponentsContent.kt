@@ -8,6 +8,7 @@ import com.iiitnr.inventoryapp.data.models.Component
 import com.iiitnr.inventoryapp.ui.components.common.EmptyState
 import com.iiitnr.inventoryapp.ui.components.common.ErrorContent
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
+import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 
 @Composable
 fun ComponentsContent(
@@ -24,6 +25,7 @@ fun ComponentsContent(
     onAddToCart: (Component) -> Unit,
     onUpdateCartQuantity: (Component, Int) -> Unit,
     modifier: Modifier = Modifier,
+    widthClass: ScreenWidthClass = ScreenWidthClass.Compact,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -49,6 +51,7 @@ fun ComponentsContent(
                     onDelete = onDelete,
                     onAddToCart = onAddToCart,
                     onUpdateCartQuantity = onUpdateCartQuantity,
+                    widthClass = widthClass,
                 )
         }
     }

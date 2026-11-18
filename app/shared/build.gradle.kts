@@ -275,6 +275,15 @@ tasks.named("detekt") {
     )
 }
 
+// SQLDelight generates its query classes into build/generated, and those names
+// are dictated by the .sq schema (e.g. a `value` column becomes `value_`). They
+// are build output, so keep them out of the static analysis.
+tasks.matching { it.name.startsWith("detekt") }.configureEach {
+    if (this is org.gradle.api.tasks.SourceTask) {
+        setSource(source.filter { file -> !file.invariantSeparatorsPath.contains("/build/generated/") })
+    }
+}
+
 ktlint {
     filter {
         exclude("**/build/**")

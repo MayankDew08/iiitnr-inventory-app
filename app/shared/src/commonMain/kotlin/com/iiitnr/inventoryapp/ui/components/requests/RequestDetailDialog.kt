@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.components.requests
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +25,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -86,10 +90,83 @@ fun RequestDetailDialog(
             Text("Close")
         }
     }, text = {
+        // Capped so the dialog does not push its Close button to the bottom of a
+        // tall desktop window with a stretch of empty space above it.
         RequestDetailDialogContent(
-            request,
+            request = request,
+            modifier = Modifier.heightIn(max = 460.dp),
         )
     })
+}
+
+/**
+ * Inline detail view used by the two-pane (Expanded) Requests layout. It reuses
+ * the same header/actions and body as the modal, so role-gated actions behave
+ * identically in both presentations.
+ */
+@Composable
+fun RequestDetailPane(
+    request: Request?,
+    isFaculty: Boolean,
+    onDeleteRequest: ((String) -> Unit)? = null,
+    onApproveRequest: ((String) -> Unit)? = null,
+    onRejectRequest: ((String) -> Unit)? = null,
+    onFulfillRequest: ((String) -> Unit)? = null,
+    onReturnRequest: ((String) -> Unit)? = null,
+    onRequestRenew: ((String) -> Unit)? = null,
+    onApproveRenew: ((String) -> Unit)? = null,
+    onShowQr: ((Request) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        if (request == null) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Select a request to view details",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            // Wraps its content instead of filling the pane, so short requests do
+            // not leave a tall empty block under the components table.
+            Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+                RequestCardHeader(
+                    request = request,
+                    isFaculty = isFaculty,
+                    onDeleteRequest = onDeleteRequest,
+                    onApproveRequest = onApproveRequest,
+                    onRejectRequest = onRejectRequest,
+                    onFulfillRequest = onFulfillRequest,
+                    onReturnRequest = onReturnRequest,
+                    onRequestRenew = onRequestRenew,
+                    onApproveRenew = onApproveRenew,
+                    onShowQr = onShowQr,
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                RequestDetailDialogContent(
+                    request = request,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+    }
 }
 
 @Composable

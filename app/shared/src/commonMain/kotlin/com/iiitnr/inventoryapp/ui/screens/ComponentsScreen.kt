@@ -1,19 +1,25 @@
 package com.iiitnr.inventoryapp.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Component
@@ -29,7 +36,10 @@ import com.iiitnr.inventoryapp.data.models.ComponentLocation
 import com.iiitnr.inventoryapp.data.models.ComponentRequest
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.models.UserRole
+import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
+import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.components.AddComponentFAB
 import com.iiitnr.inventoryapp.ui.components.components.CartDialog
 import com.iiitnr.inventoryapp.ui.components.components.CartFAB
@@ -113,6 +123,7 @@ fun ComponentsScreen(
             ComponentsTopBar(
                 onNavigateToHome = onNavigateToProfile,
                 onNavigateToRequests = onNavigateToRequests,
+                maxContentWidth = 1280.dp,
                 pendingRequestsCount = if (isFaculty) viewModel.pendingRequestsCount else null,
                 showExportCsv = canExportCsv && viewModel.components.isNotEmpty(),
                 onExportCsv = { exportComponentsCsv() },
@@ -270,16 +281,28 @@ private fun ComponentsFabSection(
     onShowCartDialog: () -> Unit,
     onAddComponent: () -> Unit,
 ) {
-    when {
-        hasCartItems -> {
-            CartFAB(
-                itemCount = cartItemCount,
-                onClick = onShowCartDialog,
-            )
-        }
+    // The Scaffold pins its FAB slot to the window's end, so centre a 1280.dp
+    // column first to keep the FAB on the content grid's right edge.
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier.widthIn(max = 1280.dp).fillMaxWidth(),
+            contentAlignment = Alignment.BottomEnd,
+        ) {
+            when {
+                hasCartItems -> {
+                    CartFAB(
+                        itemCount = cartItemCount,
+                        onClick = onShowCartDialog,
+                    )
+                }
 
-        !isReadOnly -> {
-            AddComponentFAB(onClick = onAddComponent)
+                !isReadOnly -> {
+                    AddComponentFAB(onClick = onAddComponent)
+                }
+            }
         }
     }
 }
@@ -305,40 +328,139 @@ private fun ComponentsScreenBody(
     onAddToCart: (Component) -> Unit,
     onUpdateCartQuantity: (Component, Int) -> Unit,
 ) {
-    Column(modifier = Modifier.padding(paddingValues)) {
-        SearchBar(
-            searchQuery = searchQuery,
-            onSearchQueryChange = onSearchQueryChange,
-            placeholder = "Search components...",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        )
+    ResponsiveContent(modifier = Modifier.padding(paddingValues).fillMaxSize()) { widthClass ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            ComponentsHeader(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onSearchQueryChange,
+                categoryFilter = categoryFilter,
+                onCategoryFilterChange = onCategoryFilterChange,
+                locationFilter = locationFilter,
+                onLocationFilterChange = onLocationFilterChange,
+                widthClass = widthClass,
+            )
 
-        ComponentFilterRow(
-            options = listOf("All") + ComponentCategory.labels,
-            selected = categoryFilter,
-            onSelectedChange = onCategoryFilterChange,
-        )
+            ComponentsContent(
+                widthClass = widthClass,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                components = filteredComponents,
+                allComponents = components,
+                searchQuery = searchQuery,
+                isReadOnly = isReadOnly,
+                cartQuantities = cartQuantities,
+                onRetry = onRetry,
+                onEdit = onEdit,
+                onDelete = onDelete,
+                onAddToCart = onAddToCart,
+                onUpdateCartQuantity = onUpdateCartQuantity,
+            )
+        }
+    }
+}
 
-        ComponentFilterRow(
-            options = listOf("All") + ComponentLocation.labels,
-            selected = locationFilter,
-            onSelectedChange = onLocationFilterChange,
-        )
+/**
+ * Search + filters live in a centred, width-capped container above a divider so
+ * cards scrolling underneath never look clipped by the filter bar.
+ */
+@Composable
+private fun ComponentsHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    categoryFilter: String?,
+    onCategoryFilterChange: (String?) -> Unit,
+    locationFilter: String?,
+    onLocationFilterChange: (String?) -> Unit,
+    widthClass: ScreenWidthClass,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .widthIn(max = 1280.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SearchBar(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onSearchQueryChange,
+                placeholder = "Search components...",
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        ComponentsContent(
-            isLoading = isLoading,
-            errorMessage = errorMessage,
-            components = filteredComponents,
-            allComponents = components,
-            searchQuery = searchQuery,
-            isReadOnly = isReadOnly,
-            cartQuantities = cartQuantities,
-            onRetry = onRetry,
-            onEdit = onEdit,
-            onDelete = onDelete,
-            onAddToCart = onAddToCart,
-            onUpdateCartQuantity = onUpdateCartQuantity,
-        )
+            if (widthClass == ScreenWidthClass.Expanded) {
+                UnifiedComponentFilterRow(
+                    categoryFilter = categoryFilter,
+                    onCategoryFilterChange = onCategoryFilterChange,
+                    locationFilter = locationFilter,
+                    onLocationFilterChange = onLocationFilterChange,
+                )
+            } else {
+                ComponentFilterRow(
+                    options = listOf("All") + ComponentCategory.labels,
+                    selected = categoryFilter,
+                    onSelectedChange = onCategoryFilterChange,
+                )
+
+                ComponentFilterRow(
+                    options = listOf("All") + ComponentLocation.labels,
+                    selected = locationFilter,
+                    onSelectedChange = onLocationFilterChange,
+                )
+            }
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+/**
+ * Single centred filter row on wide screens: category chips, a divider, then
+ * lab chips. Scrolls horizontally as a whole when the window is too narrow.
+ */
+@Composable
+private fun UnifiedComponentFilterRow(
+    categoryFilter: String?,
+    onCategoryFilterChange: (String?) -> Unit,
+    locationFilter: String?,
+    onLocationFilterChange: (String?) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        items(listOf("All") + ComponentCategory.labels) { option ->
+            ComponentFilterChip(
+                option = option,
+                selected =
+                    (categoryFilter == null && option == "All") ||
+                        categoryFilter.equals(option, ignoreCase = true),
+                onClick = { onCategoryFilterChange(if (option == "All") null else option) },
+            )
+        }
+
+        item {
+            VerticalDivider(
+                modifier = Modifier.padding(horizontal = 8.dp).height(24.dp),
+                color = MaterialTheme.colorScheme.outlineVariant,
+            )
+        }
+
+        items(listOf("All") + ComponentLocation.labels) { option ->
+            ComponentFilterChip(
+                option = option,
+                selected =
+                    (locationFilter == null && option == "All") ||
+                        locationFilter.equals(option, ignoreCase = true),
+                onClick = { onLocationFilterChange(if (option == "All") null else option) },
+            )
+        }
     }
 }
 
@@ -347,26 +469,39 @@ private fun ComponentFilterRow(
     options: List<String>,
     selected: String?,
     onSelectedChange: (String?) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.Center,
+        modifier = modifier.fillMaxWidth().padding(vertical = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
     ) {
         items(options) { option ->
-            val isSelected = (selected == null && option == "All") || selected.equals(option, ignoreCase = true)
-            TextButton(onClick = { onSelectedChange(if (option == "All") null else option) }) {
-                Text(
-                    text = option,
-                    color =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                )
-            }
+            ComponentFilterChip(
+                option = option,
+                selected = (selected == null && option == "All") || selected.equals(option, ignoreCase = true),
+                onClick = { onSelectedChange(if (option == "All") null else option) },
+            )
         }
+    }
+}
+
+@Composable
+private fun ComponentFilterChip(
+    option: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    TextButton(onClick = onClick, modifier = Modifier.handCursor()) {
+        Text(
+            text = option,
+            color =
+                if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+        )
     }
 }
 

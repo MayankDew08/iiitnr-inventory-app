@@ -6,12 +6,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -51,10 +55,14 @@ import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestItem
 import com.iiitnr.inventoryapp.data.models.RequestStatus
 import com.iiitnr.inventoryapp.data.models.UserRole
+import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
+import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.FulfillByIdDialog
 import com.iiitnr.inventoryapp.ui.components.requests.RenewReasonDialog
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
+import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailPane
 import com.iiitnr.inventoryapp.ui.components.requests.RequestQrDialog
 import com.iiitnr.inventoryapp.ui.components.requests.RequestsContent
 import com.iiitnr.inventoryapp.ui.components.requests.RequestsTopBar
@@ -176,135 +184,161 @@ fun RequestsScreen(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        RequestsDialogs(
-            dialogState = dialogState,
-            onDismissDelete = { dialogState.pendingDeleteRequestId = null },
-            onConfirmDelete = { id -> viewModel.deleteRequest(id) },
-            onDismissQr = { dialogState.requestToShowQr = null },
-            onRenewReasonChange = { dialogState.renewReasonInput = it },
-            onConfirmRenew = {
-                val id = dialogState.pendingRenewRequestId
-                val reasonInput = dialogState.renewReasonInput
-                dialogState.pendingRenewRequestId = null
-                dialogState.renewReasonInput = ""
-                submitRenewalIfValid(id, reasonInput) { requestId, reason ->
-                    viewModel.updateRequestStatus(requestId, RequestStatus.REQUESTED_RENEW, lastRenewReason = reason)
-                }
-            },
-            onDismissRenew = {
-                dialogState.pendingRenewRequestId = null
-                dialogState.renewReasonInput = ""
-            },
-            onRequestIdChange = { dialogState.requestIdInput = it },
-            onConfirmRequestId = { openScannedRequest(dialogState.requestIdInput) },
-            onDismissRequestId = {
-                dialogState.showRequestIdDialog = false
-                dialogState.requestIdInput = ""
-            },
-            onScanClick =
-                if (isAdminOrLA && isQrScanAvailable()) {
-                    { dialogState.showQrScanner = true }
-                } else {
-                    null
+    // Keeps the open detail (modal or inline pane) in sync with refreshed data,
+    // so an approve/issue/return shows its new status immediately.
+    LaunchedEffect(requests) {
+        val current = dialogState.selectedRequestForDetail ?: return@LaunchedEffect
+        requests.firstOrNull { it.id == current.id }?.let {
+            dialogState.selectedRequestForDetail = it
+        }
+    }
+
+    ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
+        val isExpanded = widthClass == ScreenWidthClass.Expanded
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            RequestsDialogs(
+                dialogState = dialogState,
+                showDetailDialog = !isExpanded,
+                onDismissDelete = { dialogState.pendingDeleteRequestId = null },
+                onConfirmDelete = { id -> viewModel.deleteRequest(id) },
+                onDismissQr = { dialogState.requestToShowQr = null },
+                onRenewReasonChange = { dialogState.renewReasonInput = it },
+                onConfirmRenew = {
+                    val id = dialogState.pendingRenewRequestId
+                    val reasonInput = dialogState.renewReasonInput
+                    dialogState.pendingRenewRequestId = null
+                    dialogState.renewReasonInput = ""
+                    submitRenewalIfValid(id, reasonInput) { requestId, reason ->
+                        viewModel.updateRequestStatus(
+                            requestId,
+                            RequestStatus.REQUESTED_RENEW,
+                            lastRenewReason = reason,
+                        )
+                    }
                 },
-            onIssueItemQtyChange = { componentId, quantity ->
-                dialogState.issueItemsInput = dialogState.issueItemsInput + (componentId to quantity)
-            },
-            onConfirmPartialIssue = { confirmPartialIssue() },
-            onDismissPartialIssue = {
-                dialogState.pendingPartialIssueRequest = null
-                dialogState.issueItemsInput = emptyMap()
-            },
-            onReturnItemQtyChange = { componentId, quantity ->
-                dialogState.returnItemsInput = dialogState.returnItemsInput + (componentId to quantity)
-            },
-            onConfirmPartialReturn = { confirmPartialReturn() },
-            onDismissPartialReturn = {
-                dialogState.pendingPartialReturnRequest = null
-                dialogState.returnItemsInput = emptyMap()
-            },
-            onDismissRequestDetail = { dialogState.selectedRequestForDetail = null },
-            isFaculty = isFaculty,
-            onDeleteRequest = { id -> dialogState.pendingDeleteRequestId = id },
-            onApproveRequest = onApproveRequest,
-            onRejectRequest = onRejectRequest,
-            onFulfillRequest = onFulfillRequest,
-            onReturnRequest = onReturnRequest,
-            onRequestRenew = { id ->
-                dialogState.pendingRenewRequestId = id
-                dialogState.renewReasonInput = ""
-            },
-            onApproveRenew = onApproveRenew,
-            onShowQr = { request -> dialogState.requestToShowQr = request },
-            onFetchOtp = { requestId ->
-                kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
-                    viewModel.generateRequestOtp(requestId) { otp ->
-                        if (continuation.isActive) {
-                            continuation.resume(otp) { _, _, _ -> }
+                onDismissRenew = {
+                    dialogState.pendingRenewRequestId = null
+                    dialogState.renewReasonInput = ""
+                },
+                onRequestIdChange = { dialogState.requestIdInput = it },
+                onConfirmRequestId = { openScannedRequest(dialogState.requestIdInput) },
+                onDismissRequestId = {
+                    dialogState.showRequestIdDialog = false
+                    dialogState.requestIdInput = ""
+                },
+                onScanClick =
+                    if (isAdminOrLA && isQrScanAvailable()) {
+                        { dialogState.showQrScanner = true }
+                    } else {
+                        null
+                    },
+                onIssueItemQtyChange = { componentId, quantity ->
+                    dialogState.issueItemsInput = dialogState.issueItemsInput + (componentId to quantity)
+                },
+                onConfirmPartialIssue = { confirmPartialIssue() },
+                onDismissPartialIssue = {
+                    dialogState.pendingPartialIssueRequest = null
+                    dialogState.issueItemsInput = emptyMap()
+                },
+                onReturnItemQtyChange = { componentId, quantity ->
+                    dialogState.returnItemsInput = dialogState.returnItemsInput + (componentId to quantity)
+                },
+                onConfirmPartialReturn = { confirmPartialReturn() },
+                onDismissPartialReturn = {
+                    dialogState.pendingPartialReturnRequest = null
+                    dialogState.returnItemsInput = emptyMap()
+                },
+                onDismissRequestDetail = { dialogState.selectedRequestForDetail = null },
+                isFaculty = isFaculty,
+                onDeleteRequest = { id -> dialogState.pendingDeleteRequestId = id },
+                onApproveRequest = onApproveRequest,
+                onRejectRequest = onRejectRequest,
+                onFulfillRequest = onFulfillRequest,
+                onReturnRequest = onReturnRequest,
+                onRequestRenew = { id ->
+                    dialogState.pendingRenewRequestId = id
+                    dialogState.renewReasonInput = ""
+                },
+                onApproveRenew = onApproveRenew,
+                onShowQr = { request -> dialogState.requestToShowQr = request },
+                onFetchOtp = { requestId ->
+                    kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+                        viewModel.generateRequestOtp(requestId) { otp ->
+                            if (continuation.isActive) {
+                                continuation.resume(otp) { _, _, _ -> }
+                            }
                         }
                     }
-                }
-            },
-        )
-
-        RequestsScreenScaffold(
-            onNavigateBack = onNavigateBack,
-            searchQuery = viewModel.searchQuery,
-            onSearchQueryChange = { viewModel.searchQuery = it },
-            statusFilter = viewModel.statusFilter,
-            onStatusFilterChange = { viewModel.statusFilter = it },
-            isLoading = isLoading,
-            errorMessage = errorMessage,
-            requests = requests,
-            filteredRequests = filteredRequests,
-            onRetry = { viewModel.loadRequests() },
-            isFaculty = isFaculty,
-            isAdminOrLA = isAdminOrLA,
-            canExportCsv = canExportCsv && requests.isNotEmpty(),
-            onExportCsv = { exportRequestsCsv() },
-            onScanRequestClick =
-                if (isAdminOrLA) {
-                    {
-                        dialogState.showRequestIdDialog = true
-                        dialogState.requestIdInput = ""
-                    }
-                } else {
-                    null
                 },
-            snackbarHostState = snackbarHostState,
-            onDeleteRequestClick = { requestId -> dialogState.pendingDeleteRequestId = requestId },
-            onApproveRequest = onApproveRequest,
-            onRejectRequest = onRejectRequest,
-            onFulfillRequest = onFulfillRequest,
-            onReturnRequest = onReturnRequest,
-            onRequestRenewClick = { requestId ->
-                dialogState.pendingRenewRequestId = requestId
-                dialogState.renewReasonInput = ""
-            },
-            onApproveRenew = onApproveRenew,
-            onShowQr = { request -> dialogState.requestToShowQr = request },
-            onCardClick = { request -> dialogState.selectedRequestForDetail = request },
-            onNavigateToNotifications = onNavigateToNotifications,
-            unreadNotificationCount = notificationsViewModel.unreadCount,
-        )
+            )
 
-        RequestsQrScannerOverlay(
-            visible = dialogState.showQrScanner,
-            onResult = { rawValue ->
-                openScannedRequest(rawValue)
-                dialogState.showQrScanner = false
-            },
-            onCancel = {
-                dialogState.showQrScanner = false
-            },
-        )
+            RequestsScreenScaffold(
+                onNavigateBack = onNavigateBack,
+                searchQuery = viewModel.searchQuery,
+                onSearchQueryChange = { viewModel.searchQuery = it },
+                statusFilter = viewModel.statusFilter,
+                onStatusFilterChange = { viewModel.statusFilter = it },
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                requests = requests,
+                filteredRequests = filteredRequests,
+                onRetry = { viewModel.loadRequests() },
+                isFaculty = isFaculty,
+                isAdminOrLA = isAdminOrLA,
+                canExportCsv = canExportCsv && requests.isNotEmpty(),
+                onExportCsv = { exportRequestsCsv() },
+                onScanRequestClick =
+                    if (isAdminOrLA) {
+                        {
+                            dialogState.showRequestIdDialog = true
+                            dialogState.requestIdInput = ""
+                        }
+                    } else {
+                        null
+                    },
+                snackbarHostState = snackbarHostState,
+                onDeleteRequestClick = { requestId -> dialogState.pendingDeleteRequestId = requestId },
+                onApproveRequest = onApproveRequest,
+                onRejectRequest = onRejectRequest,
+                onFulfillRequest = onFulfillRequest,
+                onReturnRequest = onReturnRequest,
+                onRequestRenewClick = { requestId ->
+                    dialogState.pendingRenewRequestId = requestId
+                    dialogState.renewReasonInput = ""
+                },
+                onApproveRenew = onApproveRenew,
+                onShowQr = { request -> dialogState.requestToShowQr = request },
+                onCardClick = { request -> dialogState.selectedRequestForDetail = request },
+                onNavigateToNotifications = onNavigateToNotifications,
+                unreadNotificationCount = notificationsViewModel.unreadCount,
+                widthClass = widthClass,
+                selectedRequestId = dialogState.selectedRequestForDetail?.id,
+                onSelectRequest = { request -> dialogState.selectedRequestForDetail = request },
+                selectedRequest =
+                    dialogState.selectedRequestForDetail?.let { selected ->
+                        requests.firstOrNull { it.id == selected.id } ?: selected
+                    },
+            )
+
+            RequestsQrScannerOverlay(
+                visible = dialogState.showQrScanner,
+                onResult = { rawValue ->
+                    openScannedRequest(rawValue)
+                    dialogState.showQrScanner = false
+                },
+                onCancel = {
+                    dialogState.showQrScanner = false
+                },
+            )
+        }
     }
 }
 
 @Composable
 private fun RequestsDialogs(
     dialogState: RequestsDialogState,
+    showDetailDialog: Boolean = true,
     onDismissDelete: () -> Unit,
     onConfirmDelete: (String) -> Unit,
     onDismissQr: () -> Unit,
@@ -335,7 +369,7 @@ private fun RequestsDialogs(
     onFetchOtp: (suspend (String) -> String?)? = null,
 ) {
     val selectedRequestForDetail = dialogState.selectedRequestForDetail
-    if (selectedRequestForDetail != null) {
+    if (showDetailDialog && selectedRequestForDetail != null) {
         RequestDetailDialog(
             request = selectedRequestForDetail,
             onDeleteRequest = onDeleteRequest,
@@ -452,40 +486,192 @@ private fun RequestsScreenBody(
     onApproveRenew: ((String) -> Unit)?,
     onShowQr: ((Request) -> Unit)?,
     onCardClick: (Request) -> Unit,
+    widthClass: ScreenWidthClass = ScreenWidthClass.Compact,
+    selectedRequestId: String? = null,
+    onSelectRequest: (Request) -> Unit = {},
+    selectedRequest: Request? = null,
 ) {
-    Column(modifier = Modifier.padding(paddingValues)) {
-        SearchBar(
+    Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+        RequestsHeader(
             searchQuery = searchQuery,
             onSearchQueryChange = onSearchQueryChange,
-            placeholder = "Search requests...",
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        )
-
-        RequestStatusFilterRow(
             statusFilter = statusFilter,
             onStatusFilterChange = onStatusFilterChange,
         )
 
-        RequestsContent(
-            modifier = Modifier.padding(),
-            isLoading = isLoading,
-            errorMessage = errorMessage,
-            requests = filteredRequests,
-            allRequests = requests,
-            statusFilter = statusFilter,
-            searchQuery = searchQuery.trim(),
-            onRetry = onRetry,
-            onDeleteRequest = onDeleteRequest,
-            onApproveRequest = onApproveRequest,
-            onRejectRequest = onRejectRequest,
-            onFulfillRequest = onFulfillRequest,
-            onReturnRequest = onReturnRequest,
-            onRequestRenew = onRequestRenew,
-            onApproveRenew = onApproveRenew,
-            onShowQr = onShowQr,
-            onCardClick = onCardClick,
-            isFaculty = isFaculty,
-        )
+        if (widthClass == ScreenWidthClass.Expanded) {
+            RequestsMasterDetail(
+                requests = requests,
+                filteredRequests = filteredRequests,
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                statusFilter = statusFilter,
+                searchQuery = searchQuery,
+                isFaculty = isFaculty,
+                onRetry = onRetry,
+                onDeleteRequest = onDeleteRequest,
+                onApproveRequest = onApproveRequest,
+                onRejectRequest = onRejectRequest,
+                onFulfillRequest = onFulfillRequest,
+                onReturnRequest = onReturnRequest,
+                onRequestRenew = onRequestRenew,
+                onApproveRenew = onApproveRenew,
+                onShowQr = onShowQr,
+                onCardClick = onCardClick,
+                selectedRequestId = selectedRequestId,
+                selectedRequest = selectedRequest,
+                onSelectRequest = onSelectRequest,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            RequestsContent(
+                modifier = Modifier.padding(),
+                isLoading = isLoading,
+                errorMessage = errorMessage,
+                requests = filteredRequests,
+                allRequests = requests,
+                statusFilter = statusFilter,
+                searchQuery = searchQuery.trim(),
+                onRetry = onRetry,
+                onDeleteRequest = onDeleteRequest,
+                onApproveRequest = onApproveRequest,
+                onRejectRequest = onRejectRequest,
+                onFulfillRequest = onFulfillRequest,
+                onReturnRequest = onReturnRequest,
+                onRequestRenew = onRequestRenew,
+                onApproveRenew = onApproveRenew,
+                onShowQr = onShowQr,
+                onCardClick = onCardClick,
+                isFaculty = isFaculty,
+                selectedRequestId = selectedRequestId,
+            )
+        }
+    }
+}
+
+/** Search + status filters, centred and capped above a divider. */
+@Composable
+private fun RequestsHeader(
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
+    statusFilter: RequestStatus?,
+    onStatusFilterChange: (RequestStatus?) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .widthIn(max = 1280.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SearchBar(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onSearchQueryChange,
+                placeholder = "Search requests...",
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            RequestStatusFilterRow(
+                statusFilter = statusFilter,
+                onStatusFilterChange = onStatusFilterChange,
+            )
+        }
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    }
+}
+
+/**
+ * Two-pane layout for wide windows: the request list on the left, the selected
+ * request's full detail (with role-gated actions) on the right.
+ */
+@Composable
+private fun RequestsMasterDetail(
+    requests: List<Request>,
+    filteredRequests: List<Request>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    statusFilter: RequestStatus?,
+    searchQuery: String,
+    isFaculty: Boolean,
+    onRetry: () -> Unit,
+    onDeleteRequest: ((String) -> Unit)?,
+    onApproveRequest: ((String) -> Unit)?,
+    onRejectRequest: ((String) -> Unit)?,
+    onFulfillRequest: ((String) -> Unit)?,
+    onReturnRequest: ((String) -> Unit)?,
+    onRequestRenew: ((String) -> Unit)?,
+    onApproveRenew: ((String) -> Unit)?,
+    onShowQr: ((Request) -> Unit)?,
+    onCardClick: (Request) -> Unit,
+    selectedRequestId: String?,
+    selectedRequest: Request?,
+    onSelectRequest: (Request) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val filteredIds = filteredRequests.map { it.id }
+
+    // Keep a valid selection whenever the filter/search changes.
+    LaunchedEffect(filteredIds, selectedRequestId) {
+        if (selectedRequestId == null || filteredIds.none { it == selectedRequestId }) {
+            filteredRequests.firstOrNull()?.let(onSelectRequest)
+        }
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Row(
+            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Box(modifier = Modifier.width(440.dp).fillMaxHeight()) {
+                RequestsContent(
+                    isLoading = isLoading,
+                    errorMessage = errorMessage,
+                    requests = filteredRequests,
+                    allRequests = requests,
+                    statusFilter = statusFilter,
+                    searchQuery = searchQuery.trim(),
+                    onRetry = onRetry,
+                    onDeleteRequest = onDeleteRequest,
+                    onApproveRequest = onApproveRequest,
+                    onRejectRequest = onRejectRequest,
+                    onFulfillRequest = onFulfillRequest,
+                    onReturnRequest = onReturnRequest,
+                    onRequestRenew = onRequestRenew,
+                    onApproveRenew = onApproveRenew,
+                    onShowQr = onShowQr,
+                    onCardClick = onCardClick,
+                    isFaculty = isFaculty,
+                    selectedRequestId = selectedRequestId,
+                )
+            }
+
+            RequestDetailPane(
+                request = selectedRequest,
+                isFaculty = isFaculty,
+                onDeleteRequest = onDeleteRequest,
+                onApproveRequest = onApproveRequest,
+                onRejectRequest = onRejectRequest,
+                onFulfillRequest = onFulfillRequest,
+                onReturnRequest = onReturnRequest,
+                onRequestRenew = onRequestRenew,
+                onApproveRenew = onApproveRenew,
+                onShowQr = onShowQr,
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .wrapContentHeight(Alignment.Top)
+                        .padding(top = 16.dp, end = 16.dp),
+            )
+        }
     }
 }
 
@@ -495,14 +681,15 @@ private fun RequestStatusFilterRow(
     onStatusFilterChange: (RequestStatus?) -> Unit,
 ) {
     LazyRow(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        contentPadding = PaddingValues(horizontal = 16.dp),
-        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        contentPadding = PaddingValues(0.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
     ) {
         items(REQUEST_STATUS_OPTIONS) { option ->
             val isSelected = statusFilter == option
             TextButton(
                 onClick = { onStatusFilterChange(option) },
+                modifier = Modifier.handCursor(),
             ) {
                 Text(
                     text = if (option != null) requestStatusDisplayLabel(option) else "All",
@@ -581,6 +768,10 @@ private fun RequestsScreenScaffold(
     onCardClick: (Request) -> Unit,
     onNavigateToNotifications: () -> Unit,
     unreadNotificationCount: Int,
+    widthClass: ScreenWidthClass = ScreenWidthClass.Compact,
+    selectedRequestId: String? = null,
+    onSelectRequest: (Request) -> Unit = {},
+    selectedRequest: Request? = null,
 ) {
     Scaffold(
         topBar = {
@@ -591,6 +782,7 @@ private fun RequestsScreenScaffold(
                 onExportCsv = onExportCsv,
                 onNavigateToNotifications = onNavigateToNotifications,
                 unreadNotificationCount = unreadNotificationCount,
+                maxContentWidth = 1280.dp,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -656,6 +848,10 @@ private fun RequestsScreenScaffold(
                     null
                 },
             onCardClick = onCardClick,
+            widthClass = widthClass,
+            selectedRequestId = selectedRequestId,
+            onSelectRequest = onSelectRequest,
+            selectedRequest = selectedRequest,
         )
     }
 }

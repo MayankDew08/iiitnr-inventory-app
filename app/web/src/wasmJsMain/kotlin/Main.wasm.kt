@@ -4,6 +4,7 @@ import com.iiitnr.inventoryapp.data.auth.GoogleWebSignInHelper
 import com.iiitnr.inventoryapp.di.initKoin
 import com.iiitnr.inventoryapp.shared.App
 import com.iiitnr.inventoryapp.ui.theme.AppTheme
+import com.iiitnr.inventoryapp.ui.theme.rememberThemeMode
 import kotlinx.browser.document
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,7 @@ fun main() {
     val scope = CoroutineScope(Dispatchers.Default)
 
     ComposeViewport(document.body!!) {
-        AppTheme {
+        AppTheme(themeMode = rememberThemeMode()) {
             App(
                 isWeb = true,
                 onUpdateAction = { reloadAndClearCache() },

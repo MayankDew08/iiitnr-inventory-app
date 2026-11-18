@@ -1,6 +1,5 @@
 package com.iiitnr.inventoryapp.ui.components.common
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +14,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.RequestStatus
 import com.iiitnr.inventoryapp.data.models.UserRole
+import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import com.iiitnr.inventoryapp.ui.theme.inventoryColors
 
 @Composable
@@ -23,7 +23,7 @@ fun StatusChip(
     modifier: Modifier = Modifier,
 ) {
     val color = requestStatusColor(status = status)
-    val isDark = isSystemInDarkTheme()
+    val isDark = LocalIsDarkTheme.current
 
     Surface(
         modifier =

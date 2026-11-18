@@ -98,7 +98,9 @@ fun buildDatesLine(
     request.lastRenewDate?.let { tokens += "Renewed: ${getRelativeDays(it, today)}" }
     request.returnedAt?.let { tokens += "Returned: ${getRelativeDays(it, today)}" }
     if (request.lateFeeAccrued > 0) {
-        tokens += "Charge: ₹${request.lateFeeAccrued}"
+        // Non-breaking space keeps "Charge:" and the amount on one line, so the
+        // rupee figure never orphans onto its own wrapped line.
+        tokens += "Charge:\u00A0₹${request.lateFeeAccrued}"
     }
     return tokens.joinToString(" · ")
 }

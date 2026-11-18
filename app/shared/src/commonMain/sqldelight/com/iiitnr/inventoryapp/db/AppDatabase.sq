@@ -16,6 +16,11 @@ CREATE TABLE SyncMetadata (
     lastModified TEXT
 );
 
+CREATE TABLE AppSetting (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE RequestDraftItem (
     userId TEXT NOT NULL,
     componentId TEXT NOT NULL,
@@ -47,6 +52,12 @@ VALUES ('components_sync', ?);
 
 getLastModified:
 SELECT lastModified FROM SyncMetadata WHERE key = 'components_sync';
+
+getSetting:
+SELECT value FROM AppSetting WHERE key = ?;
+
+upsertSetting:
+INSERT OR REPLACE INTO AppSetting(key, value) VALUES (?, ?);
 
 upsertDraftItem:
 INSERT OR REPLACE INTO RequestDraftItem(userId, componentId, quantity, updatedAt)

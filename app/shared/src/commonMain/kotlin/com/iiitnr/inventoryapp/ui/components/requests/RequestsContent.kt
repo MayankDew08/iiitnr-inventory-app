@@ -53,6 +53,7 @@ fun RequestsContent(
     onShowQr: ((Request) -> Unit)? = null,
     onCardClick: (Request) -> Unit,
     isFaculty: Boolean = false,
+    selectedRequestId: String? = null,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         when {
@@ -84,6 +85,7 @@ fun RequestsContent(
                     onShowQr = onShowQr,
                     onCardClick = onCardClick,
                     isFaculty = isFaculty,
+                    selectedRequestId = selectedRequestId,
                 )
         }
     }

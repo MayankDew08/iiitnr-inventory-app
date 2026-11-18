@@ -1,13 +1,18 @@
 package com.iiitnr.inventoryapp.desktop
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import com.iiitnr.inventoryapp.data.auth.GoogleDesktopSignInHelper
 import com.iiitnr.inventoryapp.di.initKoin
 import com.iiitnr.inventoryapp.shared.App
 import com.iiitnr.inventoryapp.ui.platform.exportComponentsCsvDesktop
 import com.iiitnr.inventoryapp.ui.theme.AppTheme
+import com.iiitnr.inventoryapp.ui.theme.rememberThemeMode
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import kotlinx.coroutines.CoroutineScope
@@ -47,12 +52,19 @@ fun main() {
         @Suppress("DEPRECATION")
         val windowIcon = painterResource("icon.png")
 
+        val windowState = rememberWindowState(size = DpSize(1280.dp, 800.dp))
+
         Window(
             onCloseRequest = ::exitApplication,
             title = "IIITNR Inventory App",
             icon = windowIcon,
+            state = windowState,
         ) {
-            AppTheme {
+            LaunchedEffect(window) {
+                window.minimumSize = java.awt.Dimension(800, 600)
+            }
+
+            AppTheme(themeMode = rememberThemeMode()) {
                 App(
                     onGoogleSignInClick = { callback ->
                         scope.launch {

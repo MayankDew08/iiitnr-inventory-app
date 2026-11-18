@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.components.requests
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -26,8 +30,10 @@ import com.iiitnr.inventoryapp.data.models.RequestStatus
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.StatusChip
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.common.requestStatusColor
 import com.iiitnr.inventoryapp.ui.theme.AppTheme
+import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import com.iiitnr.inventoryapp.utils.buildDatesLine
 import com.iiitnr.inventoryapp.utils.compactUserLabel
 
@@ -45,20 +51,31 @@ fun RequestCard(
     onCardClick: (Request) -> Unit,
     isFaculty: Boolean = false,
     modifier: Modifier = Modifier,
+    isSelected: Boolean = false,
 ) {
-    val cardBackground = requestStatusColor(request.status).copy(alpha = 0.12f)
+    val statusColor = requestStatusColor(request.status)
+    val cardShape = RoundedCornerShape(12.dp)
+    // Selection reuses the status hue so e.g. an Expired card gets a crisp red
+    // border instead of a clashing primary blue one.
+    val borderColor = if (isSelected) statusColor else statusColor.copy(alpha = 0.35f)
+    val borderWidth = if (isSelected) 2.dp else 1.dp
 
     Card(
-        modifier = modifier.fillMaxWidth().clickable { onCardClick(request) },
+        modifier = modifier.fillMaxWidth().handCursor().clickable { onCardClick(request) },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        shape = cardShape,
+        border = BorderStroke(borderWidth, borderColor),
         colors =
             CardDefaults.cardColors(
-                containerColor = cardBackground,
+                containerColor = requestCardColor(request.status, isSelected),
                 contentColor = MaterialTheme.colorScheme.onSurface,
             ),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
         ) {
             RequestCardHeader(
                 request = request,
@@ -75,18 +92,46 @@ fun RequestCard(
             Spacer(modifier = Modifier.height(8.dp))
             RequestCardMeta(request = request)
             Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = "Components",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            request.items.forEach { item ->
-                RequestItemRow(item = item)
-            }
+            RequestCardItems(request = request)
         }
     }
+}
+
+@Composable
+private fun RequestCardItems(request: Request) {
+    Text(
+        text = "Components",
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.primary,
+    )
+    Spacer(modifier = Modifier.height(4.dp))
+    request.items.forEach { item ->
+        RequestItemRow(item = item)
+    }
+}
+
+/**
+ * Blends the status hue onto the card surface instead of overlaying a raw alpha:
+ * a plain alpha tint over a light surface turns muddy at low values.
+ */
+@Composable
+private fun requestCardColor(
+    status: RequestStatus,
+    isSelected: Boolean = false,
+): Color {
+    val isDark = LocalIsDarkTheme.current
+    val tintFraction =
+        if (isSelected) {
+            if (isDark) 0.22f else 0.12f
+        } else {
+            if (isDark) 0.14f else 0.07f
+        }
+    return lerp(
+        start = MaterialTheme.colorScheme.surfaceContainerLow,
+        stop = requestStatusColor(status),
+        fraction = tintFraction,
+    )
 }
 
 @Composable

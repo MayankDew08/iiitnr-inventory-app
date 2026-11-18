@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.iiitnr.inventoryapp.data.api.UserApiService
 import com.iiitnr.inventoryapp.data.models.UpdateUserRequest
 import com.iiitnr.inventoryapp.data.models.User
+import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
 import kotlinx.coroutines.CancellationException
@@ -30,6 +31,20 @@ class UserManagementViewModel(
         private set
     var currentOffset by mutableStateOf(0)
     var searchQuery by mutableStateOf("")
+
+    /** `null` means "All roles". */
+    var roleFilter by mutableStateOf<UserRole?>(null)
+        private set
+
+    /**
+     * The loaded page narrowed by [roleFilter]. The users endpoint has no role
+     * query parameter, so the role filter is applied to the fetched page.
+     */
+    val filteredUsers: List<User>
+        get() =
+            roleFilter?.let { role ->
+                users.filter { it.role == role }
+            } ?: users
 
     val pageSize = 50
 
@@ -76,6 +91,10 @@ class UserManagementViewModel(
             delay(300.milliseconds)
             loadUsers()
         }
+    }
+
+    fun onRoleFilterChange(role: UserRole?) {
+        roleFilter = role
     }
 
     fun onNextPage() {

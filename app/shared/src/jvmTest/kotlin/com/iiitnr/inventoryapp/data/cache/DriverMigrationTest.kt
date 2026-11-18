@@ -3,6 +3,7 @@ package com.iiitnr.inventoryapp.data.cache
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
+import com.iiitnr.inventoryapp.db.AppDatabase
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -61,7 +62,8 @@ class DriverMigrationTest {
             assertTrue("Component" in tables)
             assertTrue("RequestDraft" in tables)
             assertTrue("RequestDraftItem" in tables)
-            assertEquals(2L, userVersion(driver))
+            assertTrue("AppSetting" in tables)
+            assertEquals(AppDatabase.Schema.version, userVersion(driver))
         } finally {
             driver.close()
         }
@@ -91,6 +93,15 @@ class DriverMigrationTest {
                 0,
             )
             driver.execute(null, "CREATE TABLE SyncMetadata (key TEXT PRIMARY KEY, lastModified TEXT)", 0)
+            // Existing inventory must survive the migration.
+            driver.execute(
+                null,
+                """
+                INSERT INTO Component(id, name, totalQuantity, availableQuantity, createdAt, updatedAt)
+                VALUES ('comp-1', 'Arduino Uno', 10, 7, '2024-01-01T00:00:00Z', '2024-01-01T00:00:00Z')
+                """.trimIndent(),
+                0,
+            )
             driver.execute(null, "PRAGMA user_version = 1", 0)
 
             migrateSchema(driver)
@@ -99,7 +110,23 @@ class DriverMigrationTest {
             assertTrue("Component" in tables)
             assertTrue("RequestDraft" in tables)
             assertTrue("RequestDraftItem" in tables)
-            assertEquals(2L, userVersion(driver))
+            assertTrue("AppSetting" in tables)
+            assertEquals(AppDatabase.Schema.version, userVersion(driver))
+
+            val componentNames = mutableListOf<String>()
+            driver
+                .executeQuery(
+                    identifier = null,
+                    sql = "SELECT name FROM Component WHERE id = 'comp-1'",
+                    mapper = { cursor ->
+                        while (cursor.next().value) {
+                            componentNames.add(cursor.getString(0) ?: "")
+                        }
+                        QueryResult.Value(Unit)
+                    },
+                    parameters = 0,
+                ).value
+            assertEquals(listOf("Arduino Uno"), componentNames)
         } finally {
             driver.close()
         }
@@ -117,7 +144,8 @@ class DriverMigrationTest {
             val tables = tableNames(driver)
             assertTrue("RequestDraft" in tables)
             assertTrue("RequestDraftItem" in tables)
-            assertEquals(2L, userVersion(driver))
+            assertTrue("AppSetting" in tables)
+            assertEquals(AppDatabase.Schema.version, userVersion(driver))
         } finally {
             driver.close()
         }
