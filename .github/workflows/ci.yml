@@ -74,6 +74,12 @@ jobs:
       - name: Typecheck (tsc)
         run: bun run typecheck
 
+      - name: Lint (eslint)
+        run: bun run lint
+
+      - name: Format check (prettier)
+        run: bun run format:check
+
       - name: Generated docs are up to date
         run: bun run scripts/generate-schema-docs.ts --check
 
@@ -81,9 +87,6 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/iiitnr_inventory_test
         run: bun test --parallel=1
-      
-      - name: Lint (eslint)
-        run: bun run lint
 
   kotlin:
     name: Kotlin (ktlint, detekt, test, build)
