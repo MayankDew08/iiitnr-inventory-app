@@ -15,12 +15,15 @@ enum class NotificationType {
     RENEWAL_REQUESTED,
     RENEWAL_APPROVED,
     RENEWAL_REJECTED,
+    PAYMENT_VERIFIED,
+    PAYMENT_REJECTED,
+    UNKNOWN,
 }
 
 @Serializable
 data class AppNotification(
     val id: String,
-    val type: NotificationType,
+    val type: NotificationType = NotificationType.UNKNOWN,
     val title: String,
     val body: String? = null,
     val requestId: String? = null,

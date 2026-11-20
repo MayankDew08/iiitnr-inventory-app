@@ -47,6 +47,27 @@ class FinesViewModelTest {
     }
 
     @Test
+    fun isAccruingFineReturnsTrueForUnreturnedOverdueWithFee() {
+        val accruing = request(lateFeeAccrued = 15, returnedAt = null, fineSettledAt = null)
+
+        assertTrue(isAccruingFine(accruing))
+    }
+
+    @Test
+    fun isAccruingFineReturnsFalseForReturnedFineShouldBePayableInstead() {
+        val returned = request(lateFeeAccrued = 15, returnedAt = "2026-03-01T00:00:00Z")
+
+        assertFalse(isAccruingFine(returned))
+    }
+
+    @Test
+    fun isAccruingFineReturnsFalseWhenLateFeeAccruedIsZero() {
+        val noFee = request(lateFeeAccrued = 0, returnedAt = null)
+
+        assertFalse(isAccruingFine(noFee))
+    }
+
+    @Test
     fun isPayableFineExcludesAReturnedSettledFine() {
         val settled =
             request(
@@ -77,11 +98,29 @@ class FinesViewModelTest {
     }
 
     @Test
-    fun payButtonRequiresFinesAndNoPendingPayment() {
+    fun payButtonStaysAvailableWhileAPaymentIsOnlyPending() {
         val fines = listOf(request(10))
         assertTrue(canStartPayment(fines, emptyList()))
-        assertFalse(canStartPayment(fines, listOf(payment(PaymentStatus.PENDING))))
+        assertTrue(canStartPayment(fines, listOf(payment(PaymentStatus.PENDING))))
         assertFalse(canStartPayment(emptyList(), emptyList()))
+    }
+
+    @Test
+    fun payButtonIsBlockedOnceAPaymentIsSubmittedForVerification() {
+        val fines = listOf(request(10))
+        val payments = listOf(payment(PaymentStatus.SUBMITTED))
+
+        assertFalse(canStartPayment(fines, payments))
+        assertEquals("Your payment is awaiting verification", payBlockedHint(payments))
+    }
+
+    @Test
+    fun payButtonIsNotBlockedByRejectedOrPendingPayments() {
+        val fines = listOf(request(10))
+        val payments = listOf(payment(PaymentStatus.REJECTED), payment(PaymentStatus.PENDING))
+
+        assertTrue(canStartPayment(fines, payments))
+        assertEquals(null, payBlockedHint(payments))
     }
 
     private fun payment(status: PaymentStatus) =

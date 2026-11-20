@@ -199,6 +199,9 @@ fun App(
                             FinesAdminScreen(
                                 onNavigateBack = { navController.popBackStack() },
                                 onStudentClick = { userId -> navController.navigate("fines_admin/$userId") },
+                                onNavigateToPaymentVerifications = {
+                                    navController.navigate("payment_verifications")
+                                },
                             )
                         }
                         composable(
@@ -224,8 +227,6 @@ fun App(
                                 navController.navigate("audit_log")
                             }, onNavigateToUserManagement = {
                                 navController.navigate("user_management")
-                            }, onNavigateToPaymentVerifications = {
-                                navController.navigate("payment_verifications")
                             }, onNavigateToNotifications = {
                                 navController.navigate("notifications")
                             })

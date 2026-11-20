@@ -26,6 +26,13 @@ class FinesViewModel(
 ) : ViewModel() {
     var fines: List<Request> by mutableStateOf(initialFines)
         private set
+
+    /**
+     * Still-growing fines on expired-but-unreturned requests. View-only — the
+     * student cannot pay until return finalizes the amount.
+     */
+    var accruingFines: List<Request> by mutableStateOf(emptyList())
+        private set
     var payments: List<Payment> by mutableStateOf(initialPayments)
         private set
     var isLoading: Boolean by mutableStateOf(false)
@@ -54,7 +61,9 @@ class FinesViewModel(
                 val token = tokenManager.token.first()
                 if (token != null) {
                     val response = requestApiService.getRequests(token)
-                    fines = response.requests.filter(::isPayableFine)
+                    val all = response.requests
+                    fines = all.filter(::isPayableFine)
+                    accruingFines = all.filter(::isAccruingFine)
                 } else {
                     errorMessage = "No authentication token"
                 }
@@ -96,6 +105,10 @@ internal fun computeTotalOwed(fines: List<Request>): Int = fines.sumOf { it.late
 internal fun isPayableFine(request: Request): Boolean =
     request.returnedAt != null && request.lateFeeAccrued > 0 && request.fineSettledAt == null
 
+/** A fine that is still growing: request is overdue, not yet returned. View-only. */
+internal fun isAccruingFine(request: Request): Boolean =
+    request.returnedAt == null && request.lateFeeAccrued > 0 && request.fineSettledAt == null
+
 internal fun pendingPayment(payments: List<Payment>): Payment? = payments.firstOrNull { it.status.name == "PENDING" }
 
 internal fun submittedPayments(payments: List<Payment>): List<Payment> =
@@ -103,8 +116,22 @@ internal fun submittedPayments(payments: List<Payment>): List<Payment> =
 
 internal fun rejectedPayments(payments: List<Payment>): List<Payment> = payments.filter { it.status.name == "REJECTED" }
 
-/** The Pay button appears only with unpaid fines and no in-flight PENDING payment. */
+/**
+ * The Pay button stays available with unpaid fines until a payment has been
+ * submitted for verification. A PENDING intent does not block it: the student
+ * may have abandoned or failed the UPI transfer, and re-tapping Pay reuses and
+ * refreshes that same PENDING row server-side. Only a SUBMITTED payment blocks,
+ * so a second transfer cannot be made for the same fines.
+ */
 internal fun canStartPayment(
     fines: List<Request>,
     payments: List<Payment>,
-): Boolean = fines.isNotEmpty() && pendingPayment(payments) == null
+): Boolean = fines.isNotEmpty() && submittedPayments(payments).isEmpty()
+
+/** Shown under the disabled Pay button, or null when Pay is tappable. */
+internal fun payBlockedHint(payments: List<Payment>): String? =
+    if (submittedPayments(payments).isNotEmpty()) {
+        "Your payment is awaiting verification"
+    } else {
+        null
+    }

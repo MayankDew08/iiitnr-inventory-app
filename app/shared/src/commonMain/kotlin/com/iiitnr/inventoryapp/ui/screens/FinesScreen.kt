@@ -69,7 +69,9 @@ fun FinesScreen(
 
     ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
         val isExpanded = widthClass == ScreenWidthClass.Expanded
-        val hasFines = !viewModel.isLoading && viewModel.errorMessage == null && viewModel.fines.isNotEmpty()
+        val hasFines =
+            !viewModel.isLoading && viewModel.errorMessage == null &&
+                (viewModel.fines.isNotEmpty() || viewModel.accruingFines.isNotEmpty())
 
         Scaffold(
             topBar = {
@@ -131,13 +133,14 @@ private fun FinesBody(
                 }
             }
 
-            viewModel.fines.isEmpty() && viewModel.payments.isEmpty() -> {
+            viewModel.fines.isEmpty() && viewModel.accruingFines.isEmpty() && viewModel.payments.isEmpty() -> {
                 FinesCenteredState { FinesEmptyState() }
             }
 
             isExpanded -> {
                 FinesMasterDetail(
                     fines = viewModel.fines,
+                    accruingFines = viewModel.accruingFines,
                     payments = viewModel.payments,
                     total = viewModel.totalOwed,
                     today = today,
@@ -152,6 +155,7 @@ private fun FinesBody(
                 FinesCenteredState {
                     FinesContent(
                         fines = viewModel.fines,
+                        accruingFines = viewModel.accruingFines,
                         payments = viewModel.payments,
                         total = viewModel.totalOwed,
                         today = today,
@@ -178,6 +182,7 @@ private fun FinesCenteredState(content: @Composable () -> Unit) {
 @Composable
 private fun FinesContent(
     fines: List<Request>,
+    accruingFines: List<Request>,
     payments: List<Payment>,
     total: Int,
     today: LocalDate,
@@ -192,7 +197,11 @@ private fun FinesContent(
             }
         }
 
-        item { FinesOverdueHeading() }
+        accruingSection(accruingFines = accruingFines, today = today, onCardClick = onCardClick)
+
+        if (fines.isNotEmpty()) {
+            item { FinesOverdueHeading() }
+        }
 
         items(fines, key = { it.id }) { request ->
             FineCard(
@@ -227,12 +236,15 @@ private fun FinesContent(
             }
         }
 
-        finesSummaryItems(
-            total = total,
-            fineCount = fines.size,
-            canPay = canStartPayment(fines, payments),
-            onStartPayment = onStartPayment,
-        )
+        if (fines.isNotEmpty()) {
+            finesSummaryItems(
+                total = total,
+                fineCount = fines.size,
+                canPay = canStartPayment(fines, payments),
+                blockedHint = payBlockedHint(payments),
+                onStartPayment = onStartPayment,
+            )
+        }
     }
 }
 
@@ -259,7 +271,8 @@ private fun PendingPaymentCard(
             Text(
                 text =
                     "You started a payment of ₹${pending.amount}, " +
-                        "${timeAgo(pending.createdAt)}. Submit UTR.",
+                        "${timeAgo(pending.createdAt)}. Submit your UTR to finish, " +
+                        "or tap Pay to try again.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer,
             )
@@ -307,6 +320,7 @@ private fun EarlierAttempts(rejected: List<Payment>) {
 @Composable
 private fun FinesMasterDetail(
     fines: List<Request>,
+    accruingFines: List<Request>,
     payments: List<Payment>,
     total: Int,
     today: LocalDate,
@@ -315,10 +329,13 @@ private fun FinesMasterDetail(
     onStartPayment: () -> Unit,
     onResumePayment: () -> Unit,
 ) {
-    // Keep a valid selection whenever the fine list changes.
-    LaunchedEffect(fines) {
-        if (selectedRequest == null || fines.none { it.id == selectedRequest.id }) {
-            fines.firstOrNull()?.let(onSelect)
+    // Keep a valid selection whenever the fine list changes. Prefer payable
+    // fines, fall back to accruing so the detail pane is never empty when a
+    // request of either kind exists.
+    LaunchedEffect(fines, accruingFines) {
+        val all = fines + accruingFines
+        if (selectedRequest == null || all.none { it.id == selectedRequest.id }) {
+            all.firstOrNull()?.let(onSelect)
         }
     }
 
@@ -335,7 +352,16 @@ private fun FinesMasterDetail(
                         }
                     }
 
-                    item { FinesOverdueHeading() }
+                    accruingSection(
+                        accruingFines = accruingFines,
+                        today = today,
+                        selectedId = selectedRequest?.id,
+                        onCardClick = onSelect,
+                    )
+
+                    if (fines.isNotEmpty()) {
+                        item { FinesOverdueHeading() }
+                    }
 
                     items(fines, key = { it.id }) { request ->
                         FineCard(
@@ -346,12 +372,15 @@ private fun FinesMasterDetail(
                         )
                     }
 
-                    finesSummaryItems(
-                        total = total,
-                        fineCount = fines.size,
-                        canPay = canStartPayment(fines, payments),
-                        onStartPayment = onStartPayment,
-                    )
+                    if (fines.isNotEmpty()) {
+                        finesSummaryItems(
+                            total = total,
+                            fineCount = fines.size,
+                            canPay = canStartPayment(fines, payments),
+                            blockedHint = payBlockedHint(payments),
+                            onStartPayment = onStartPayment,
+                        )
+                    }
                 }
             }
 
@@ -362,6 +391,115 @@ private fun FinesMasterDetail(
                         .weight(1f)
                         .wrapContentHeight(Alignment.Top)
                         .padding(top = 16.dp, end = 16.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Accruing fines are view-only: fines on expired-but-unreturned requests. The
+ * amount is still growing day by day, so there is no Pay affordance and every
+ * row carries a "so far" label so the figure is never mistaken for the final
+ * bill.
+ */
+private fun LazyListScope.accruingSection(
+    accruingFines: List<Request>,
+    today: LocalDate,
+    selectedId: String? = null,
+    onCardClick: (Request) -> Unit,
+) {
+    if (accruingFines.isEmpty()) return
+
+    item(key = "accruing-header") {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)) {
+            Text(
+                text = "Accruing",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "These fines grow each day until you return the item.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    items(accruingFines, key = { "accruing-${it.id}" }) { request ->
+        AccruingFineCard(
+            request = request,
+            today = today,
+            selected = request.id == selectedId,
+            onClick = onCardClick,
+        )
+    }
+}
+
+@Composable
+private fun AccruingFineCard(
+    request: Request,
+    today: LocalDate,
+    selected: Boolean = false,
+    onClick: (Request) -> Unit,
+) {
+    Card(
+        onClick = { onClick(request) },
+        modifier = Modifier.fillMaxWidth().handCursor().padding(horizontal = 16.dp, vertical = 4.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border =
+            BorderStroke(
+                width = if (selected) 1.5.dp else 1.dp,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            ),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = request.projectTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "₹${request.lateFeeAccrued}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        text = "so far",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = itemsSummary(request),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(
+                text = daysLateLabel(request.returnDueAt, today),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -382,6 +520,7 @@ private fun LazyListScope.finesSummaryItems(
     total: Int,
     fineCount: Int,
     canPay: Boolean,
+    blockedHint: String?,
     onStartPayment: () -> Unit,
 ) {
     item {
@@ -429,10 +568,10 @@ private fun LazyListScope.finesSummaryItems(
         ) {
             Text("Pay ₹$total")
         }
-        if (!canPay) {
+        if (!canPay && blockedHint != null) {
             Spacer(Modifier.height(6.dp))
             Text(
-                text = "Settle any payment in progress first",
+                text = blockedHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
