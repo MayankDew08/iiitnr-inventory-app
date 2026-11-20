@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.iiitnr.inventoryapp.ui.screens
 
 import androidx.compose.foundation.BorderStroke
@@ -70,7 +72,8 @@ fun FinesScreen(
     ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
         val isExpanded = widthClass == ScreenWidthClass.Expanded
         val hasFines =
-            !viewModel.isLoading && viewModel.errorMessage == null &&
+            !viewModel.isLoading &&
+                viewModel.errorMessage == null &&
                 (viewModel.fines.isNotEmpty() || viewModel.accruingFines.isNotEmpty())
 
         Scaffold(

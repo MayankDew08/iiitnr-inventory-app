@@ -498,7 +498,6 @@ fun ProfilePicture(
     modifier: Modifier = Modifier,
     size: Dp = 96.dp,
 ) {
-
     if (imageUrl != null) {
         val sanitizedUrl = imageUrl.replace("http://", "https://")
         AsyncImage(

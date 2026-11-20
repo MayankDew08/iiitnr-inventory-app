@@ -79,38 +79,38 @@ fun FinesAdminScreen(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Box(modifier = Modifier.fillMaxSize()) {
                     when {
-                    viewModel.isLoading -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                        viewModel.isLoading -> {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
                         }
-                    }
 
-                    viewModel.errorMessage != null -> {
-                        FinesAdminErrorState(
-                            detail = viewModel.errorMessage,
-                            onRetry = { viewModel.load() },
-                        )
-                    }
+                        viewModel.errorMessage != null -> {
+                            FinesAdminErrorState(
+                                detail = viewModel.errorMessage,
+                                onRetry = { viewModel.load() },
+                            )
+                        }
 
-                    viewModel.students.isEmpty() -> {
-                        FinesAdminEmptyState()
-                    }
+                        viewModel.students.isEmpty() -> {
+                            FinesAdminEmptyState()
+                        }
 
-                    isExpanded -> {
-                        FinesAdminMasterDetail(
-                            students = viewModel.students,
-                            grandTotal = viewModel.grandTotal,
-                            onRequestClick = { selectedRequest = it },
-                        )
-                    }
+                        isExpanded -> {
+                            FinesAdminMasterDetail(
+                                students = viewModel.students,
+                                grandTotal = viewModel.grandTotal,
+                                onRequestClick = { selectedRequest = it },
+                            )
+                        }
 
-                    else -> {
-                        FinesAdminContent(
-                            students = viewModel.students,
-                            grandTotal = viewModel.grandTotal,
-                            onStudentClick = onStudentClick,
-                        )
-                    }
+                        else -> {
+                            FinesAdminContent(
+                                students = viewModel.students,
+                                grandTotal = viewModel.grandTotal,
+                                onStudentClick = onStudentClick,
+                            )
+                        }
                     }
                 }
             }
