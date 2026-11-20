@@ -136,7 +136,7 @@ function proofPart(bytes: Uint8Array = VALID_PNG) {
   };
 }
 
-async function createIntent(token: string, payload?: unknown) {
+function createIntent(token: string, payload?: unknown) {
   return app.inject({
     method: 'POST',
     url: '/payments',
@@ -145,7 +145,7 @@ async function createIntent(token: string, payload?: unknown) {
   });
 }
 
-async function getMine(token: string) {
+function getMine(token: string) {
   return app.inject({
     method: 'GET',
     url: '/payments/mine',
@@ -153,7 +153,7 @@ async function getMine(token: string) {
   });
 }
 
-async function submit(token: string, paymentId: string, parts: Parameters<typeof buildMultipartBody>[0]) {
+function submit(token: string, paymentId: string, parts: Parameters<typeof buildMultipartBody>[0]) {
   const form = buildMultipartBody(parts);
   return app.inject({
     method: 'POST',
@@ -176,7 +176,7 @@ async function getRequestRow(id: string) {
   return row ?? null;
 }
 
-async function getAdminPending(token: string) {
+function getAdminPending(token: string) {
   return app.inject({
     method: 'GET',
     url: '/payments/admin/pending',
@@ -184,7 +184,7 @@ async function getAdminPending(token: string) {
   });
 }
 
-async function getAdminDetail(token: string, paymentId: string) {
+function getAdminDetail(token: string, paymentId: string) {
   return app.inject({
     method: 'GET',
     url: `/payments/admin/${paymentId}`,
@@ -192,7 +192,7 @@ async function getAdminDetail(token: string, paymentId: string) {
   });
 }
 
-async function verify(token: string, paymentId: string) {
+function verify(token: string, paymentId: string) {
   return app.inject({
     method: 'POST',
     url: `/payments/admin/${paymentId}/verify`,
@@ -200,7 +200,7 @@ async function verify(token: string, paymentId: string) {
   });
 }
 
-async function reject(
+function reject(
   token: string,
   paymentId: string,
   payload: { reasonCode: unknown; notes?: unknown },
@@ -321,7 +321,7 @@ beforeAll(async () => {
   createdUserIds.push(student.id, otherStudent.id, faculty.id, la.id);
 });
 
-afterEach(async () => {
+afterEach(() => {
   cleanUploadsDir();
 });
 
@@ -874,7 +874,11 @@ describe('POST /payments/admin/:id/verify', () => {
     assert.equal(response.statusCode, 200);
     const settled = await Promise.all(fines.map((fine) => getRequestRow(fine.id)));
     assert.ok(settled.every((row) => row?.fineSettledAt != null));
-    const timestamps = settled.map((row) => Date.parse(row!.fineSettledAt!));
+    const timestamps = settled.map((row) => {
+      assert.ok(row, 'expected row to exist');
+      assert.ok(row.fineSettledAt, 'expected fineSettledAt to be set');
+      return Date.parse(row.fineSettledAt);
+    });
     assert.ok(Math.max(...timestamps) - Math.min(...timestamps) <= 1);
     assert.ok(settled.every((row) => row?.updatedAt === row?.fineSettledAt));
   });
@@ -1127,8 +1131,8 @@ describe('GET /payments/admin/pending', () => {
     assert.ok(rows[0].studentEmail.startsWith('pay_student_'));
     assert.ok(rows[0].studentEmail.endsWith('@example.com'));
     assert.equal(rows[0].utr, 'UTR-OLDEST');
-    assert.equal(rows[0].proofImageUrl, undefined);
-    assert.equal(rows[0].allocations, undefined);
+    assert.equal('proofImageUrl' in rows[0], false);
+    assert.equal('allocations' in rows[0], false);
   });
 
   test('excludes VERIFIED and REJECTED payments', async () => {

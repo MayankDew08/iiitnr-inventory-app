@@ -231,7 +231,7 @@ export async function listMyPayments(userId: string): Promise<PaymentWithAllocat
  * Stamps the UTR and proof on a PENDING payment. A payment is immutable once
  * submitted: only PENDING → SUBMITTED is allowed.
  */
-export async function submitPayment(
+export function submitPayment(
   paymentId: string,
   userId: string,
   utr: string,
@@ -282,7 +282,7 @@ export async function submitPayment(
  * queue is fair. Proof and allocations are intentionally omitted; the LA
  * loads those on the detail endpoint.
  */
-export async function listPendingForAdmin(): Promise<PendingPaymentSummary[]> {
+export function listPendingForAdmin(): Promise<PendingPaymentSummary[]> {
   return db
     .select({
       id: payment.id,
