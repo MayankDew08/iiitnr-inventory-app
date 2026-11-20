@@ -63,7 +63,6 @@ fun PaymentScreen(
                         uri = state.uri,
                         amount = state.payment.amount,
                         vpa = state.upi.upiVpa,
-                        reference = state.upi.reference,
                         onEnterUtr = viewModel::onEnterUtrTapped,
                     )
 

@@ -96,20 +96,18 @@ class PaymentViewModel(
                         amount = response.payment.amount,
                         vpa = response.upi.upiVpa,
                         payee = response.upi.payeeName,
-                        reference = response.upi.reference,
                     )
                 uiState = PaymentUiState.IntentReady(response.payment, response.upi)
                 applyLaunchResult(launcher.launchUpi(uri), uri, response.payment, response.upi)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AppHttpException) {
                 uiState =
                     PaymentUiState.Error(
-                        if (e is AppHttpException && e.errorCode == "no_unpaid_fines") {
-                            "No fines to pay"
-                        } else {
-                            e.toAppError().message
-                        },
+                        if (e.errorCode == "no_unpaid_fines") "No fines to pay" else e.toAppError().message,
                     )
+            } catch (e: Exception) {
+                uiState = PaymentUiState.Error(e.toAppError().message)
             }
         }
     }
@@ -130,8 +128,9 @@ class PaymentViewModel(
                     currentPayment = pending
                     uiState = PaymentUiState.EnteringUtr(pending)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 uiState = PaymentUiState.Error(e.toAppError().message)
             }
         }
@@ -144,7 +143,6 @@ class PaymentViewModel(
                 amount = state.payment.amount,
                 vpa = state.upi.upiVpa,
                 payee = state.upi.payeeName,
-                reference = state.upi.reference,
             )
         applyLaunchResult(result, uri, state.payment, state.upi)
     }
@@ -194,8 +192,9 @@ class PaymentViewModel(
                     return@launch
                 }
                 uiState = state.copy(proof = picked.bytes, proofMime = mime, submitError = null)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
                 uiState = state.copy(submitError = e.toAppError().message)
             }
         }
@@ -226,13 +225,17 @@ class PaymentViewModel(
                         proofMime = mime,
                     )
                 uiState = PaymentUiState.Submitted(response.payment)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: AppHttpException) {
+                uiState =
+                    if (e.status == 409) {
+                        PaymentUiState.Submitted(payment)
+                    } else {
+                        state.copy(submitError = e.toAppError().message)
+                    }
             } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                if (e is AppHttpException && e.status == 409) {
-                    uiState = PaymentUiState.Submitted(payment)
-                } else {
-                    uiState = state.copy(submitError = e.toAppError().message)
-                }
+                uiState = state.copy(submitError = e.toAppError().message)
             }
         }
     }

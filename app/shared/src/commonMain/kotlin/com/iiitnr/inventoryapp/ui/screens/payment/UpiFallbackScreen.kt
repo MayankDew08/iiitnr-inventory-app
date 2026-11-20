@@ -23,7 +23,6 @@ fun UpiFallbackScreen(
     uri: String,
     amount: Int,
     vpa: String,
-    reference: String,
     onEnterUtr: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -53,7 +52,6 @@ fun UpiFallbackScreen(
         SelectionContainer {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(text = "UPI ID: $vpa", style = MaterialTheme.typography.bodyMedium)
-                Text(text = "Reference: $reference", style = MaterialTheme.typography.bodyMedium)
             }
         }
         Spacer(Modifier.height(20.dp))

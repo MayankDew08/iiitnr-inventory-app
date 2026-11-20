@@ -7,14 +7,14 @@ object UpiUri {
         amount: Int,
         vpa: String,
         payee: String,
-        reference: String,
     ): String {
         require(amount > 0) { "amount must be positive" }
         require(vpa.isNotBlank()) { "vpa is required" }
         require(payee.isNotBlank()) { "payee is required" }
-        require(reference.isNotBlank()) { "reference is required" }
 
+        // No transaction reference (tr=): some UPI apps reject a personal VPA
+        // link that carries one, so the QR and intent carry only the payee and amount.
         return "upi://pay?pa=$vpa&pn=${payee.encodeURLParameter()}" +
-            "&am=$amount&cu=INR&tr=${reference.encodeURLParameter()}"
+            "&am=$amount&cu=INR"
     }
 }
