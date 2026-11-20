@@ -368,7 +368,12 @@ describe('POST /payments', () => {
       fines.map((fine) => fine.id).sort(),
     );
 
-    assert.equal(body.upi.reference, body.payment.id);
+    assert.equal(body.upi.reference, body.payment.id.replaceAll('-', ''));
+    assert.ok(
+      body.upi.reference.length <= 35,
+      `tr must fit NPCI's 35-char limit, got ${body.upi.reference.length}`,
+    );
+    assert.match(body.upi.reference, /^[A-Za-z0-9]+$/, 'tr must be alphanumeric');
     assert.equal(body.upi.upiVpa, process.env.UPI_VPA);
     assert.equal(body.upi.payeeName, process.env.UPI_PAYEE_NAME);
 

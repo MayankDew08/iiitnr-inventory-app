@@ -343,7 +343,7 @@ async function registerPlugins(app: FastifyInstance, env: AppEnvironment) {
     origin: buildCorsOrigin(env, allowedOrigins),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Accept', 'Last-Event-ID'],
     exposedHeaders: ['Last-Modified'],
   });
 

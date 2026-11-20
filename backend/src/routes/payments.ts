@@ -75,10 +75,13 @@ function normalizeUploadPath(base: string, rawName: string): string | null {
   return target;
 }
 
-function getPublicUrl(req: FastifyRequest, filename: string): string {
-  const host = req.headers.host ?? 'localhost:4000';
-  const protocol = req.headers['x-forwarded-proto'] === 'https' ? 'https' : req.protocol;
-  return `${protocol}://${host}/api/uploads/payments/${filename}`;
+/**
+ * Stored as a path, not an absolute URL: the host in the request is whatever
+ * address the client happened to use (LAN IP, localhost, a hosted domain), so
+ * an absolute URL breaks for every other client. Clients prefix their own server.
+ */
+function proofPublicPath(filename: string): string {
+  return `/api/uploads/payments/${filename}`;
 }
 
 function deleteUploadedFile(target: string): void {
@@ -192,7 +195,7 @@ async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
   await writeFile(safeTarget, processedBuffer);
 
   try {
-    const updated = await submitPayment(id, userId, trimmedUtr, getPublicUrl(req, filename));
+    const updated = await submitPayment(id, userId, trimmedUtr, proofPublicPath(filename));
     return reply.send({ payment: updated });
   } catch (err) {
     // The payment was not written, so do not leave an orphan proof behind.
@@ -270,7 +273,11 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
       upi: {
         upiVpa,
         payeeName,
-        reference: created.id,
+        // NPCI caps `tr` at 35 alphanumeric characters, so the UUID's hyphens
+        // have to go: a 36-char value with dashes gets the intent accepted by
+        // the PSP and then rejected at debit time, which surfaces to the payer
+        // as a generic "UPI system is facing some technical issue".
+        reference: created.id.replaceAll('-', ''),
       },
     });
   });
