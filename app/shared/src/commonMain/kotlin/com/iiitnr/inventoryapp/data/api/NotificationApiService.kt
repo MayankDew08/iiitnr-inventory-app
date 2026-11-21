@@ -18,7 +18,11 @@ class NotificationApiService(
     private val client: HttpClient,
     private val baseUrl: String,
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json =
+        Json {
+            ignoreUnknownKeys = true
+            coerceInputValues = true
+        }
 
     suspend fun getNotifications(
         token: String,

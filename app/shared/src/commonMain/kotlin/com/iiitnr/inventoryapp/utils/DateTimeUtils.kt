@@ -8,9 +8,11 @@ import com.iiitnr.inventoryapp.data.models.RequestStatus
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import kotlin.math.abs
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 fun currentSystemDate(): LocalDate =
     Clock.System
@@ -66,6 +68,33 @@ fun formatDisplayDate(dateTimeString: String?): String {
             .take(3)
     return "${date.day} $month ${date.year}"
 }
+
+/** Compact relative time for recent events, e.g. "2h ago". */
+fun timeAgo(
+    dateTimeString: String?,
+    now: Instant = Clock.System.now(),
+): String {
+    val eventInstant = parseEventInstant(dateTimeString) ?: return ""
+    val minutes = (now - eventInstant).inWholeMinutes
+    return when {
+        minutes < 1 -> "just now"
+        minutes < 60 -> "$minutes min ago"
+        minutes < 24 * 60 -> "${minutes / 60}h ago"
+        else -> "${minutes / (24 * 60)}d ago"
+    }
+}
+
+private fun parseEventInstant(dateTimeString: String?): Instant? =
+    dateTimeString?.let { raw ->
+        // Backend timestamps are ISO instants ("...Z"); older values may be local
+        // date-times with a space separator, so accept both forms.
+        Instant.parseOrNull(raw)
+            ?: try {
+                LocalDateTime.parse(raw.replace(' ', 'T')).toInstant(TimeZone.currentSystemDefault())
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+    }
 
 fun isOverdue(
     dateTimeString: String?,

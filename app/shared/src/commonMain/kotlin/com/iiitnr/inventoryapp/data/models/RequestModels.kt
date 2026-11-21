@@ -34,6 +34,8 @@ data class Request(
     val renewalRequestedAt: String? = null,
     val receivedByUserId: String? = null,
     val lateFeeAccrued: Int = 0,
+    val fineFinalizedAt: String? = null,
+    val fineSettledAt: String? = null,
     val otp: String? = null,
 )
 

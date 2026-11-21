@@ -1,6 +1,8 @@
 package com.iiitnr.inventoryapp.di
 
 import com.iiitnr.inventoryapp.data.api.ApiClient
+import com.iiitnr.inventoryapp.ui.platform.DefaultProofPicker
+import com.iiitnr.inventoryapp.ui.platform.ProofPicker
 import com.iiitnr.inventoryapp.ui.screens.AuditLogViewModel
 import com.iiitnr.inventoryapp.ui.screens.AuthViewModel
 import com.iiitnr.inventoryapp.ui.screens.ComponentsViewModel
@@ -11,6 +13,7 @@ import com.iiitnr.inventoryapp.ui.screens.NotificationsViewModel
 import com.iiitnr.inventoryapp.ui.screens.ProfileViewModel
 import com.iiitnr.inventoryapp.ui.screens.RequestsViewModel
 import com.iiitnr.inventoryapp.ui.screens.UserManagementViewModel
+import com.iiitnr.inventoryapp.utils.createIntentLauncher
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -25,6 +28,9 @@ val apiModule =
         single { ApiClient.auditLogApiService }
         single { ApiClient.userApiService }
         single { ApiClient.versionApiService }
+        single { ApiClient.paymentApi }
+        single { createIntentLauncher() }
+        single<ProofPicker> { DefaultProofPicker() }
     }
 
 val storageModule =

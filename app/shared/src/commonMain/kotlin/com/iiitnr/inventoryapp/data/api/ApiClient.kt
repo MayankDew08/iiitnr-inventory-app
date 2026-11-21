@@ -37,6 +37,11 @@ object ApiClient {
                     Json {
                         ignoreUnknownKeys = true
                         encodeDefaults = false
+                        // Future-proof against backend-side enum additions (e.g.
+                        // new NotificationType members): unknown enum values
+                        // coerce to the field's default instead of crashing the
+                        // screen that renders them.
+                        coerceInputValues = true
                     },
                 )
             }
@@ -103,4 +108,16 @@ object ApiClient {
     val auditLogApiService: AuditLogApiService = AuditLogApiService(client, BASE_URL)
     val userApiService: UserApiService = UserApiService(client, BASE_URL)
     val versionApiService: VersionApiService = VersionApiService(client, BASE_URL)
+    val paymentApi: PaymentApi = PaymentApi(client, BASE_URL)
+
+    /** Scheme and host of the server this client talks to, without the `/api` prefix. */
+    val serverOrigin: String = BASE_URL.removeSuffix("/api")
+
+    /**
+     * Full base URL including the `/api` segment where production terminates
+     * it (Caddy strips `/api` before forwarding). In dev this is bare
+     * `http://localhost:4000`, so server-relative paths from the backend must
+     * be joined against *this*, not [serverOrigin].
+     */
+    val baseUrl: String = BASE_URL
 }

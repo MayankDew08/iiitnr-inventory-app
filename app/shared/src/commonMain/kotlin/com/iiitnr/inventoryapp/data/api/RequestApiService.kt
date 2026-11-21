@@ -21,7 +21,7 @@ import io.ktor.http.contentType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
-class RequestApiService(
+open class RequestApiService(
     private val client: HttpClient,
     private val baseUrl: String,
 ) {
@@ -36,7 +36,7 @@ class RequestApiService(
                 setBody(payload)
             }.body()
 
-    suspend fun getRequests(
+    open suspend fun getRequests(
         token: String,
         status: String? = null,
     ): RequestsResponse {

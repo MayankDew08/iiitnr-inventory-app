@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.AppNotification
+import com.iiitnr.inventoryapp.data.models.NotificationType
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.EmptyState
 import com.iiitnr.inventoryapp.ui.components.common.ErrorContent
@@ -128,7 +129,11 @@ private fun NotificationsBody(
                             today = today,
                             onClick = {
                                 viewModel.markRead(notification.id)
-                                notification.requestId?.let(onOpenRequest)
+                                // Unknown types are forward-compat stubs from a
+                                // newer backend: mark read but do not navigate.
+                                if (notification.type != NotificationType.UNKNOWN) {
+                                    notification.requestId?.let(onOpenRequest)
+                                }
                             },
                         )
                     }
