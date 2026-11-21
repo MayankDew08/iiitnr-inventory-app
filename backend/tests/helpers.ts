@@ -45,8 +45,10 @@ export async function createComponent(data: {
   availableQuantity?: number;
   category?: (typeof ComponentCategory)[keyof typeof ComponentCategory] | null;
   location?: (typeof Location)[keyof typeof Location] | null;
+  /** Override for tests that assert ordering; two inserts can share a millisecond. */
+  createdAt?: string;
 }) {
-  const n = now();
+  const n = data.createdAt ?? now();
   const [c] = await db
     .insert(component)
     .values({

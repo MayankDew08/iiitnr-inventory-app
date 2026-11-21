@@ -133,6 +133,8 @@ describe('Component CRUD API', () => {
     });
 
     test('returns 200 with components (LA)', async () => {
+      // Explicit, distinct timestamps: two back-to-back inserts can land in the
+      // same millisecond, and then createdAt-desc order between them is undefined.
       const component1 = await createComponent({
         name: 'Resistor 10k',
         description: '10k ohm resistor',
@@ -140,6 +142,7 @@ describe('Component CRUD API', () => {
         availableQuantity: 50,
         category: ComponentCategory.Sensors,
         location: Location.IoT_Lab,
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
       });
 
       const component2 = await createComponent({
@@ -151,28 +154,30 @@ describe('Component CRUD API', () => {
         location: Location.Robo_Lab,
       });
 
-      const response = await app.inject({
-        method: 'GET',
-        url: '/components',
-        headers: {
-          authorization: `Bearer ${taToken}`,
-        },
-      });
+      try {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/components',
+          headers: {
+            authorization: `Bearer ${taToken}`,
+          },
+        });
 
-      assert.equal(response.statusCode, 200);
-      const body = response.json();
-      assert.ok(Array.isArray(body.components));
+        assert.equal(response.statusCode, 200);
+        const body = response.json();
+        assert.ok(Array.isArray(body.components));
 
-      // LA should see both created components, ordered by createdAt desc
-      const owned = body.components.filter(
-        (c: { id: string }) => c.id === component1.id || c.id === component2.id,
-      );
-      assert.equal(owned.length, 2);
-      assert.equal(owned[0].id, component2.id);
-      assert.equal(owned[1].id, component1.id);
-
-      // Clean up created components
-      await deleteComponents([component1.id, component2.id]);
+        // LA should see both created components, ordered by createdAt desc
+        const owned = body.components.filter(
+          (c: { id: string }) => c.id === component1.id || c.id === component2.id,
+        );
+        assert.equal(owned.length, 2);
+        assert.equal(owned[0].id, component2.id);
+        assert.equal(owned[1].id, component1.id);
+      } finally {
+        // Always clean up: leftovers here break the CSV import tests below.
+        await deleteComponents([component1.id, component2.id]);
+      }
     });
 
     test('returns 304 Not Modified when If-Modified-Since is up to date (LA)', async () => {
@@ -376,29 +381,34 @@ describe('Component CRUD API', () => {
 
         assert.equal(response.statusCode, 201);
         const body = response.json();
-        assert.equal(body.imported, 2);
-        assert.equal(body.components.length, 2);
-        assert.equal(body.components[0].name, 'Resistor 10k');
-        assert.equal(body.components[1].name, 'Arduino Uno');
-        assert.equal(body.components[0].category, ComponentCategory.Sensors);
-        assert.equal(body.components[0].location, Location.IoT_Lab);
-        assert.equal(body.components[1].category, ComponentCategory.Microcontrollers);
-        assert.equal(body.components[1].location, Location.Robo_Lab);
+        const importedIds: string[] = (body.components ?? []).map((c: { id: string }) => c.id);
 
-        // Verify components exist via GET
-        const getResponse = await app.inject({
-          method: 'GET',
-          url: '/components',
-          headers: { authorization: `Bearer ${adminToken}` },
-        });
-        assert.equal(getResponse.statusCode, 200);
-        const components = getResponse.json().components;
-        const imported = components.filter(
-          (c: { name: string }) => c.name === 'Resistor 10k' || c.name === 'Arduino Uno',
-        );
-        assert.equal(imported.length, 2);
+        try {
+          assert.equal(body.imported, 2);
+          assert.equal(body.components.length, 2);
+          assert.equal(body.components[0].name, 'Resistor 10k');
+          assert.equal(body.components[1].name, 'Arduino Uno');
+          assert.equal(body.components[0].category, ComponentCategory.Sensors);
+          assert.equal(body.components[0].location, Location.IoT_Lab);
+          assert.equal(body.components[1].category, ComponentCategory.Microcontrollers);
+          assert.equal(body.components[1].location, Location.Robo_Lab);
 
-        await deleteComponents(body.components.map((c: { id: string }) => c.id));
+          // Verify components exist via GET
+          const getResponse = await app.inject({
+            method: 'GET',
+            url: '/components',
+            headers: { authorization: `Bearer ${adminToken}` },
+          });
+          assert.equal(getResponse.statusCode, 200);
+          const components = getResponse.json().components;
+          const imported = components.filter(
+            (c: { name: string }) => c.name === 'Resistor 10k' || c.name === 'Arduino Uno',
+          );
+          assert.equal(imported.length, 2);
+        } finally {
+          // Always clean up: leftovers here inflate the round-trip export below.
+          await deleteComponents(importedIds);
+        }
       });
 
       test('LA can import CSV', async () => {

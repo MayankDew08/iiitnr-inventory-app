@@ -235,12 +235,12 @@ async function seedSubmittedPayment(amounts: number[], utr = '100000000001') {
  * API guard. For tests that need legacy rows the API can no longer create
  * (e.g. queue ordering with two submitted payments for one student).
  */
-async function seedSubmittedRowDirect(amount: number, utr: string) {
+async function seedSubmittedRowDirect(amount: number, utr: string, userId: string = studentId) {
   const nowIso = new Date().toISOString();
   const paymentId = randomUUID();
   await db.insert(payment).values({
     id: paymentId,
-    userId: studentId,
+    userId,
     amount,
     status: 'SUBMITTED',
     utr,
@@ -581,8 +581,8 @@ describe('POST /payments/:id/submit', () => {
     assert.equal(submitted.status, 'SUBMITTED');
     assert.equal(submitted.utr, '123456789012');
     assert.ok(submitted.submittedAt);
-    assert.ok(submitted.proofImageUrl.includes('/payments/'));
-    assert.ok(submitted.proofImageUrl.endsWith('.webp'));
+    // The API exposes the authenticated proof route, never the file on disk.
+    assert.equal(submitted.proofImageUrl, `/payments/${paymentId}/proof`);
 
     const stored = await getPaymentRow(paymentId);
     assert.ok(stored);
@@ -1127,10 +1127,10 @@ describe('POST /payments/admin/:id/reject', () => {
 
 describe('GET /payments/admin/pending', () => {
   test('returns SUBMITTED payments, oldest-first', async () => {
-    // Two SUBMITTED payments for one student bypass the API: the one-active
-    // rule only governs creation, the queue must still order any legacy rows.
+    // Two students, because Payment_one_active_per_user allows only one
+    // PENDING/SUBMITTED payment per student.
     const first = await seedSubmittedRowDirect(10, '100000000201');
-    const second = await seedSubmittedRowDirect(20, '100000000202');
+    const second = await seedSubmittedRowDirect(20, '100000000202', otherStudentId);
 
     const now = Date.parse(first.submittedAt);
     await db
@@ -1386,7 +1386,7 @@ describe('GET /payments/:id/proof (S1)', () => {
     assert.equal(response.statusCode, 200);
     assert.match(response.headers['content-type'] ?? '', /image\/webp/);
     assert.equal(response.headers['cache-control'], 'private, no-store');
-    assert.ok(response.rawBody.length > 0);
+    assert.ok(response.rawPayload.length > 0);
   });
 
   test('another student gets 403', async () => {
