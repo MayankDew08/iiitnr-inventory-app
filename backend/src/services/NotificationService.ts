@@ -18,6 +18,8 @@ export const NotificationType = {
   RENEWAL_REQUESTED: 'RENEWAL_REQUESTED',
   RENEWAL_APPROVED: 'RENEWAL_APPROVED',
   RENEWAL_REJECTED: 'RENEWAL_REJECTED',
+  PAYMENT_VERIFIED: 'PAYMENT_VERIFIED',
+  PAYMENT_REJECTED: 'PAYMENT_REJECTED',
 } as const;
 
 export type NotificationTypeValue = (typeof NotificationType)[keyof typeof NotificationType];

@@ -34,7 +34,7 @@ await migrate(db, { migrationsFolder });
 const truncatePool = new Pool({ connectionString: url });
 try {
   await truncatePool.query(
-    'TRUNCATE TABLE "User", "Request", "Component", "RequestItem", "AuditLog", "Notification", "RequestEmail" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "User", "Request", "Component", "RequestItem", "AuditLog", "Notification", "RequestEmail", "Payment", "PaymentAllocation" RESTART IDENTITY CASCADE',
   );
 } finally {
   await truncatePool.end();

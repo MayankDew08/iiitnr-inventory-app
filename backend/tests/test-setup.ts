@@ -3,6 +3,8 @@ import { execSync } from 'node:child_process';
 
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'test-secret';
+process.env.UPI_VPA = process.env.UPI_VPA ?? 'test@upi';
+process.env.UPI_PAYEE_NAME = process.env.UPI_PAYEE_NAME ?? 'Test Payee';
 
 if (!process.env.TEST_DATABASE_URL && process.env.DATABASE_URL) {
   const mainDbUrl = process.env.DATABASE_URL;

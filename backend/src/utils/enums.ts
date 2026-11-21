@@ -33,6 +33,14 @@ export const Location = {
   VLSI_Lab: 'VLSI_Lab',
 } as const;
 
+export const PaymentRejectionReason = {
+  UTR_NOT_FOUND: 'UTR_NOT_FOUND',
+  AMOUNT_MISMATCH: 'AMOUNT_MISMATCH',
+  PROOF_UNCLEAR: 'PROOF_UNCLEAR',
+  DUPLICATE_PAYMENT: 'DUPLICATE_PAYMENT',
+  OTHER: 'OTHER',
+} as const;
+
 export const AuditActionType = {
   CREATE: 'CREATE',
   UPDATE: 'UPDATE',
@@ -48,10 +56,13 @@ export type RequestStatusValue = (typeof RequestStatus)[keyof typeof RequestStat
 export type CategoryValue = (typeof ComponentCategory)[keyof typeof ComponentCategory];
 export type LocationValue = (typeof Location)[keyof typeof Location];
 export type AuditActionTypeValue = (typeof AuditActionType)[keyof typeof AuditActionType];
+export type PaymentRejectionReasonValue =
+  (typeof PaymentRejectionReason)[keyof typeof PaymentRejectionReason];
 
 export const requestStatusValues = Object.values(RequestStatus);
 export const categoryValues = Object.values(ComponentCategory);
 export const userRoleValues = Object.values(UserRole);
+export const paymentRejectionReasonValues = Object.values(PaymentRejectionReason);
 
 const locationEnumValues = Object.values(Location);
 export const locationValues = locationEnumValues.map((v) => v.replace(/_/g, ' '));
