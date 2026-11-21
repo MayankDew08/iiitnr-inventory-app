@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -92,7 +93,8 @@ fun FinesAdminStudentDetailScreen(
 
                 else -> {
                     StudentFinesContent(
-                        fines = viewModel.fines,
+                        payable = viewModel.payableFines,
+                        accruing = viewModel.accruingFines,
                         total = viewModel.total,
                         today = today,
                         onRequestClick = { request -> selectedRequest = request },
@@ -112,30 +114,32 @@ fun FinesAdminStudentDetailScreen(
 
 @Composable
 private fun StudentFinesContent(
-    fines: List<Request>,
+    payable: List<Request>,
+    accruing: List<Request>,
     total: Int,
     today: LocalDate,
     onRequestClick: (Request) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize()) {
-            item {
-                Text(
-                    text = "Overdue requests",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-                )
-            }
-
-            items(fines, key = { it.id }) { request ->
-                AdminFineCard(
-                    request = request,
-                    today = today,
-                    onClick = onRequestClick,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
-            }
+            adminFineSection(
+                key = "payable",
+                title = "Payable",
+                subtitle = "Returned items. The fine is final and the student can pay it now.",
+                fines = payable,
+                accruing = false,
+                today = today,
+                onRequestClick = onRequestClick,
+            )
+            adminFineSection(
+                key = "accruing",
+                title = "Accruing",
+                subtitle = "Still not returned. These grow each day until the item comes back.",
+                fines = accruing,
+                accruing = true,
+                today = today,
+                onRequestClick = onRequestClick,
+            )
 
             item {
                 Spacer(Modifier.height(8.dp))
@@ -152,7 +156,7 @@ private fun StudentFinesContent(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "Total",
+                        text = "Total outstanding",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -216,7 +220,7 @@ internal fun StudentFinesPane(
                 color = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = "$requestCount overdue request${if (requestCount == 1) "" else "s"}",
+                text = "$requestCount unpaid fine${if (requestCount == 1) "" else "s"}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -265,14 +269,20 @@ private fun StudentFinesPaneBody(
         }
 
         else -> {
-            viewModel.fines.forEach { request ->
-                AdminFineCard(
-                    request = request,
-                    today = today,
-                    onClick = onRequestClick,
-                    modifier = Modifier.padding(vertical = 4.dp),
-                )
-            }
+            PaneFineSection(
+                title = "Payable",
+                fines = viewModel.payableFines,
+                accruing = false,
+                today = today,
+                onRequestClick = onRequestClick,
+            )
+            PaneFineSection(
+                title = "Accruing",
+                fines = viewModel.accruingFines,
+                accruing = true,
+                today = today,
+                onRequestClick = onRequestClick,
+            )
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(Modifier.height(12.dp))
@@ -282,7 +292,7 @@ private fun StudentFinesPaneBody(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = "Total",
+                    text = "Total outstanding",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -294,6 +304,72 @@ private fun StudentFinesPaneBody(
                 )
             }
         }
+    }
+}
+
+/**
+ * One titled group of fines in the full-screen layout. Mirrors the student
+ * Fines screen: payable (final) and accruing ("so far") are shown apart so the
+ * LA can tell what is ready to be paid from what is still growing.
+ */
+private fun LazyListScope.adminFineSection(
+    key: String,
+    title: String,
+    subtitle: String,
+    fines: List<Request>,
+    accruing: Boolean,
+    today: LocalDate,
+    onRequestClick: (Request) -> Unit,
+) {
+    if (fines.isEmpty()) return
+    item(key = "$key-header") {
+        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    items(fines, key = { "$key-${it.id}" }) { request ->
+        AdminFineCard(
+            request = request,
+            today = today,
+            accruing = accruing,
+            onClick = onRequestClick,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+    }
+}
+
+@Composable
+private fun PaneFineSection(
+    title: String,
+    fines: List<Request>,
+    accruing: Boolean,
+    today: LocalDate,
+    onRequestClick: (Request) -> Unit,
+) {
+    if (fines.isEmpty()) return
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+    )
+    fines.forEach { request ->
+        AdminFineCard(
+            request = request,
+            today = today,
+            accruing = accruing,
+            onClick = onRequestClick,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
     }
 }
 
@@ -325,6 +401,7 @@ private fun FinesPaneErrorState(
 private fun AdminFineCard(
     request: Request,
     today: LocalDate,
+    accruing: Boolean,
     onClick: (Request) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -348,12 +425,21 @@ private fun AdminFineCard(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
-                Text(
-                    text = "₹${request.lateFeeAccrued}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "₹${request.lateFeeAccrued}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    if (accruing) {
+                        Text(
+                            text = "so far",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
             Spacer(Modifier.height(4.dp))

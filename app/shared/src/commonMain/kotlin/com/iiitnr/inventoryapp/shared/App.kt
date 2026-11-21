@@ -38,6 +38,9 @@ import com.iiitnr.inventoryapp.ui.screens.ProfileScreen
 import com.iiitnr.inventoryapp.ui.screens.RegisterScreen
 import com.iiitnr.inventoryapp.ui.screens.RequestsScreen
 import com.iiitnr.inventoryapp.ui.screens.UserManagementScreen
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationDetailScreen
+import com.iiitnr.inventoryapp.ui.screens.admin.payment.PaymentVerificationsScreen
+import com.iiitnr.inventoryapp.ui.screens.payment.PaymentScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -166,12 +169,39 @@ fun App(
                         composable("fines") {
                             FinesScreen(
                                 onNavigateBack = { navController.popBackStack() },
+                                onStartPayment = { navController.navigate("payment/new") },
+                                onResumePayment = { navController.navigate("payment/resume") },
+                            )
+                        }
+                        composable("payment/new") {
+                            PaymentScreen(
+                                start = "new",
+                                onNavigateBack = { navController.popBackStack() },
+                                onDone = {
+                                    navController.navigate("fines") {
+                                        popUpTo("fines") { inclusive = true }
+                                    }
+                                },
+                            )
+                        }
+                        composable("payment/resume") {
+                            PaymentScreen(
+                                start = "resume",
+                                onNavigateBack = { navController.popBackStack() },
+                                onDone = {
+                                    navController.navigate("fines") {
+                                        popUpTo("fines") { inclusive = true }
+                                    }
+                                },
                             )
                         }
                         composable("fines_admin") {
                             FinesAdminScreen(
                                 onNavigateBack = { navController.popBackStack() },
                                 onStudentClick = { userId -> navController.navigate("fines_admin/$userId") },
+                                onNavigateToPaymentVerifications = {
+                                    navController.navigate("payment_verifications")
+                                },
                             )
                         }
                         composable(
@@ -224,6 +254,29 @@ fun App(
                         composable("user_management") {
                             UserManagementScreen(
                                 onNavigateBack = { navController.popBackStack() },
+                            )
+                        }
+                        composable("payment_verifications") {
+                            PaymentVerificationsScreen(
+                                onNavigateBack = { navController.popBackStack() },
+                                onOpenPayment = { paymentId ->
+                                    navController.navigate("payment_verification/$paymentId")
+                                },
+                            )
+                        }
+                        composable("payment_verification/{paymentId}") { backStackEntry ->
+                            val paymentId =
+                                backStackEntry.arguments
+                                    ?.read { getStringOrNull("paymentId") }
+                                    .orEmpty()
+                            PaymentVerificationDetailScreen(
+                                paymentId = paymentId,
+                                onNavigateBack = { navController.popBackStack() },
+                                onResolved = {
+                                    navController.navigate("payment_verifications") {
+                                        popUpTo("payment_verifications") { inclusive = true }
+                                    }
+                                },
                             )
                         }
                     }

@@ -17,6 +17,7 @@ class FinesAdminViewModelTest {
         user: User,
         lateFeeAccrued: Int,
         returnedAt: String? = null,
+        fineSettledAt: String? = null,
     ) = Request(
         id = id,
         userId = user.id,
@@ -28,6 +29,7 @@ class FinesAdminViewModelTest {
         user = user,
         lateFeeAccrued = lateFeeAccrued,
         returnedAt = returnedAt,
+        fineSettledAt = fineSettledAt,
     )
 
     private val mixedFixture =
@@ -62,8 +64,32 @@ class FinesAdminViewModelTest {
     }
 
     @Test
-    fun excludesReturnedRequestsEvenIfLateFeeAccruedIsPositive() {
-        val students = computeStudentsWithFines(listOf(request("r1", userA, 50, returnedAt = "2026-01-05T00:00:00Z")))
+    fun includesFinalizedUnpaidFinesEvenAfterReturn() {
+        // A returned request whose fine is finalized but not yet settled is
+        // exactly what the student's Pay flow covers; the LA must see it too.
+        val students =
+            computeStudentsWithFines(
+                listOf(request("r1", userA, 50, returnedAt = "2026-01-05T00:00:00Z")),
+            )
+
+        assertEquals(1, students.size)
+        assertEquals(50, students.first().total)
+    }
+
+    @Test
+    fun excludesSettledFinesEvenIfLateFeeAccruedIsPositive() {
+        val students =
+            computeStudentsWithFines(
+                listOf(
+                    request(
+                        "r1",
+                        userA,
+                        50,
+                        returnedAt = "2026-01-05T00:00:00Z",
+                        fineSettledAt = "2026-01-06T00:00:00Z",
+                    ),
+                ),
+            )
 
         assertTrue(students.isEmpty())
     }

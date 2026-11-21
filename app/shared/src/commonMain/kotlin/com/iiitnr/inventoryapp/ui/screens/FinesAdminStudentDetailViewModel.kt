@@ -28,6 +28,12 @@ class FinesAdminStudentDetailViewModel(
 
     val total: Int get() = fines.sumOf { it.lateFeeAccrued }
 
+    /** Returned, finalized, unpaid: what the student's Pay flow settles. */
+    val payableFines: List<Request> get() = fines.filter(::isPayableFine)
+
+    /** Still out and growing; the figure is "so far", not a final bill. */
+    val accruingFines: List<Request> get() = fines.filter(::isAccruingFine)
+
     // Broad catch is deliberate: toAppError() classifies every failure
     // (HTTP, network, serialization) centrally, matching RequestsViewModel.
     @Suppress("TooGenericExceptionCaught")
@@ -45,7 +51,7 @@ class FinesAdminStudentDetailViewModel(
                         response.requests.filter {
                             (it.user?.id ?: it.userId) == userId &&
                                 it.lateFeeAccrued > 0 &&
-                                it.returnedAt == null
+                                it.fineSettledAt == null
                         }
                     studentName =
                         mine.firstOrNull()?.user?.name

@@ -73,7 +73,11 @@ class FinesAdminViewModel(
 
 internal fun computeStudentsWithFines(requests: List<Request>): List<StudentWithFines> =
     requests
-        .filter { it.lateFeeAccrued > 0 && it.returnedAt == null }
+        // Outstanding dues = everything the student still owes. Includes both
+        // accruing (not yet returned) and finalized-but-unpaid (returned,
+        // fineSettledAt still null) — the latter is exactly what the student's
+        // Pay flow is settling, so filtering it out hid real liability.
+        .filter { it.lateFeeAccrued > 0 && it.fineSettledAt == null }
         .groupBy { it.user?.id ?: it.userId }
         .map { (userId, reqs) ->
             StudentWithFines(

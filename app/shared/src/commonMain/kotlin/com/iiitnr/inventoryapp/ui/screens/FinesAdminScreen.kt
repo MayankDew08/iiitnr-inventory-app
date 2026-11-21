@@ -1,6 +1,7 @@
 package com.iiitnr.inventoryapp.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +20,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -36,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
@@ -52,6 +57,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun FinesAdminScreen(
     onNavigateBack: () -> Unit,
     onStudentClick: (userId: String) -> Unit,
+    onNavigateToPaymentVerifications: () -> Unit,
     viewModel: FinesAdminViewModel = koinViewModel(),
 ) {
     var selectedRequest by remember { mutableStateOf<Request?>(null) }
@@ -71,41 +77,17 @@ fun FinesAdminScreen(
                 }
             },
         ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-                when {
-                    viewModel.isLoading -> {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    }
-
-                    viewModel.errorMessage != null -> {
-                        FinesAdminErrorState(
-                            detail = viewModel.errorMessage,
-                            onRetry = { viewModel.load() },
-                        )
-                    }
-
-                    viewModel.students.isEmpty() -> {
-                        FinesAdminEmptyState()
-                    }
-
-                    isExpanded -> {
-                        FinesAdminMasterDetail(
-                            students = viewModel.students,
-                            grandTotal = viewModel.grandTotal,
-                            onRequestClick = { selectedRequest = it },
-                        )
-                    }
-
-                    else -> {
-                        FinesAdminContent(
-                            students = viewModel.students,
-                            grandTotal = viewModel.grandTotal,
-                            onStudentClick = onStudentClick,
-                        )
-                    }
-                }
+            Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+                PaymentVerificationsEntry(
+                    onClick = onNavigateToPaymentVerifications,
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                FinesAdminBody(
+                    viewModel = viewModel,
+                    isExpanded = isExpanded,
+                    onStudentClick = onStudentClick,
+                    onRequestClick = { selectedRequest = it },
+                )
             }
         }
     }
@@ -116,6 +98,83 @@ fun FinesAdminScreen(
             onDismiss = { selectedRequest = null },
         )
     }
+}
+
+@Composable
+private fun FinesAdminBody(
+    viewModel: FinesAdminViewModel,
+    isExpanded: Boolean,
+    onStudentClick: (userId: String) -> Unit,
+    onRequestClick: (Request) -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        when {
+            viewModel.isLoading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            viewModel.errorMessage != null -> {
+                FinesAdminErrorState(
+                    detail = viewModel.errorMessage,
+                    onRetry = { viewModel.load() },
+                )
+            }
+
+            viewModel.students.isEmpty() -> {
+                FinesAdminEmptyState()
+            }
+
+            isExpanded -> {
+                FinesAdminMasterDetail(
+                    students = viewModel.students,
+                    grandTotal = viewModel.grandTotal,
+                    onRequestClick = onRequestClick,
+                )
+            }
+
+            else -> {
+                FinesAdminContent(
+                    students = viewModel.students,
+                    grandTotal = viewModel.grandTotal,
+                    onStudentClick = onStudentClick,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Entry row at the top of the LA fines screen that opens the pending-payment
+ * verification list. Lives here (not under Profile) because LAs reach for the
+ * Fines icon for anything student-fine-related.
+ */
+@Composable
+private fun PaymentVerificationsEntry(onClick: () -> Unit) {
+    ListItem(
+        headlineContent = { Text("Payment Verifications") },
+        leadingContent = {
+            Icon(
+                imageVector = Icons.Default.Verified,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        trailingContent = {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .handCursor()
+                .clickable(onClick = onClick),
+    )
 }
 
 @Composable
@@ -271,7 +330,7 @@ private fun StudentFineCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    text = "${student.requestCount} overdue request${if (student.requestCount == 1) "" else "s"}",
+                    text = "${student.requestCount} unpaid fine${if (student.requestCount == 1) "" else "s"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
