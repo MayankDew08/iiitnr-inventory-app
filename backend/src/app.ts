@@ -99,11 +99,36 @@ function buildCorsOrigin(env: AppEnvironment, allowedOrigins: string[] | undefin
   return allowedOrigins ?? false;
 }
 
+const UPLOADS_MAX_PER_MINUTE = 6000;
+const UPLOADS_PREFIXES = ['/uploads/', '/api/uploads/'];
+
+function requestPath(url: string): string {
+  return url.split('?')[0] ?? url;
+}
+
+function isUploadRequest(url: string): boolean {
+  const path = requestPath(url);
+  return UPLOADS_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+function buildRateLimitError(
+  _request: FastifyRequest,
+  context: { ttl: number; statusCode: number },
+) {
+  const error = new Error(
+    `Too many requests. Please wait ${Math.ceil(context.ttl / 1000)} seconds before retrying.`,
+  ) as Error & { statusCode: number; code: string };
+  error.statusCode = context.statusCode;
+  error.code = 'RATE_LIMITED';
+  return error;
+}
+
 function buildRateLimitConfig(app: FastifyInstance) {
   return {
     global: true,
     max: 100,
     timeWindow: '1 minute',
+    allowList: (request: FastifyRequest) => isUploadRequest(request.raw.url ?? '/'),
     // Bucket on the verified token subject, never on the raw Authorization
     // header: an unauthenticated client can send any header value it likes, so
     // keying on the header hands every request a fresh bucket. Unauthenticated
@@ -120,20 +145,7 @@ function buildRateLimitConfig(app: FastifyInstance) {
       }
       return `ip:${request.ip}`;
     },
-    // The plugin throws whatever this returns, so it has to be an Error carrying
-    // the status code; a bare object reaches the error handler with no status
-    // and is reported as a 500.
-    errorResponseBuilder: (
-      _request: FastifyRequest,
-      context: { ttl: number; statusCode: number },
-    ) => {
-      const error = new Error(
-        `Too many requests. Please wait ${Math.ceil(context.ttl / 1000)} seconds before retrying.`,
-      ) as Error & { statusCode: number; code: string };
-      error.statusCode = context.statusCode;
-      error.code = 'RATE_LIMITED';
-      return error;
-    },
+    errorResponseBuilder: buildRateLimitError,
   };
 }
 
@@ -370,16 +382,26 @@ async function registerPlugins(app: FastifyInstance, env: AppEnvironment) {
   });
 
   await app.register(FastifySSEPlugin);
+  const uploadsCache = { root: join(process.cwd(), 'uploads'), maxAge: '365d', immutable: true };
 
-  await app.register(staticFiles, {
-    root: join(process.cwd(), 'uploads'),
-    prefix: '/uploads/',
-  });
+  await app.register(async (scope) => {
+    await scope.register(rateLimit, {
+      global: true,
+      max: UPLOADS_MAX_PER_MINUTE,
+      timeWindow: '1 minute',
+      errorResponseBuilder: buildRateLimitError,
+    });
 
-  await app.register(staticFiles, {
-    root: join(process.cwd(), 'uploads'),
-    prefix: '/api/uploads/',
-    decorateReply: false,
+    await scope.register(staticFiles, {
+      ...uploadsCache,
+      prefix: '/uploads/',
+    });
+
+    await scope.register(staticFiles, {
+      ...uploadsCache,
+      prefix: '/api/uploads/',
+      decorateReply: false,
+    });
   });
 }
 

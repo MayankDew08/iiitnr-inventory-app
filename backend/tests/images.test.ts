@@ -2,7 +2,7 @@ import './test-setup.js';
 
 import { beforeAll, afterAll, describe, test } from 'bun:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { db } from '../src/drizzle/db.js';
 import { auditLog } from '../src/drizzle/schema.js';
@@ -45,6 +45,33 @@ afterAll(async () => {
 });
 
 const UPLOADS_IMAGES_DIR = join(process.cwd(), 'uploads', 'images');
+
+describe('Served uploads', () => {
+  test('are cached immutably for a year', async () => {
+    mkdirSync(UPLOADS_IMAGES_DIR, { recursive: true });
+    const filename = `${crypto.randomUUID()}.webp`;
+    writeFileSync(join(UPLOADS_IMAGES_DIR, filename), 'cached-bytes');
+
+    try {
+      for (const url of [`/uploads/images/${filename}`, `/api/uploads/images/${filename}`]) {
+        const response = await app.inject({ method: 'GET', url });
+
+        assert.equal(response.statusCode, 200, `${url} should be served`);
+        const cacheControl = response.headers['cache-control'];
+        assert.ok(
+          typeof cacheControl === 'string' && cacheControl.includes('immutable'),
+          `${url} should be immutable, got ${cacheControl}`,
+        );
+        assert.ok(
+          typeof cacheControl === 'string' && cacheControl.includes('max-age=31536000'),
+          `${url} should be cached for a year, got ${cacheControl}`,
+        );
+      }
+    } finally {
+      unlinkSync(join(UPLOADS_IMAGES_DIR, filename));
+    }
+  });
+});
 
 function cleanUploadsDir() {
   if (!existsSync(UPLOADS_IMAGES_DIR)) return;

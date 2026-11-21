@@ -14,6 +14,7 @@ import io.ktor.client.plugins.sse.SSE
 import io.ktor.client.request.HttpRequest
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -49,9 +50,12 @@ object ApiClient {
 
             install(HttpRequestRetry) {
                 maxRetries = 3
-                retryOnExceptionIf { request, _ -> request.method.value == "GET" }
+                retryOnExceptionIf { request, _ ->
+                    isRetryableRequest(request.method, request.headers[HttpHeaders.Accept])
+                }
                 retryIf { request, response ->
-                    request.method.value == "GET" && response.status.value >= 500
+                    isRetryableRequest(request.method, request.headers[HttpHeaders.Accept]) &&
+                        response.status.value >= 500
                 }
                 exponentialDelay()
             }
@@ -84,6 +88,13 @@ object ApiClient {
         val isAuthEndpoint = request.url.encodedPath.contains("/auth/")
         return carriesToken && !isAuthEndpoint
     }
+
+    private fun isRetryableRequest(
+        method: HttpMethod,
+        acceptHeader: String?,
+    ): Boolean = method.value == "GET" && !acceptHeader.isEventStream()
+
+    private fun String?.isEventStream(): Boolean = this?.contains("text/event-stream", ignoreCase = true) == true
 
     val authApiService: AuthApiService = AuthApiService(client, BASE_URL)
     val componentApiService: ComponentApiService = ComponentApiService(client, BASE_URL)

@@ -6,9 +6,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.iiitnr.inventoryapp.data.api.NotificationApiService
+import com.iiitnr.inventoryapp.data.models.AppHttpException
 import com.iiitnr.inventoryapp.data.models.AppNotification
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
+import io.ktor.client.plugins.sse.SSEClientException
+import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -61,16 +64,19 @@ class NotificationsViewModel(
     }
 
     private suspend fun streamNotifications(token: String) {
+        var backoffMs = STREAM_RECONNECT_DELAY_MS
         while (true) {
             try {
                 notificationApiService.streamNotifications(token).collect { notification ->
                     notifications = listOf(notification) + notifications
                     unreadCount++
                 }
-                delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
+                backoffMs = STREAM_RECONNECT_DELAY_MS
+                delay(backoffMs.milliseconds)
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                delay(STREAM_RECONNECT_DELAY_MS.milliseconds)
+                delay((e.streamRetryDelayMs() ?: backoffMs).milliseconds)
+                backoffMs = (backoffMs * 2).coerceAtMost(STREAM_MAX_RECONNECT_DELAY_MS)
             }
         }
     }
@@ -123,5 +129,33 @@ class NotificationsViewModel(
 
     private companion object {
         const val STREAM_RECONNECT_DELAY_MS = 5_000L
+        const val STREAM_MAX_RECONNECT_DELAY_MS = 60_000L
+        const val RATE_LIMIT_STATUS = 429
+        const val DEFAULT_RATE_LIMIT_WAIT_MS = 60_000L
+
+        fun Throwable.streamRetryDelayMs(): Long? =
+            when (this) {
+                is SSEClientException -> {
+                    val response = response
+                    if (response?.status?.value != RATE_LIMIT_STATUS) {
+                        null
+                    } else {
+                        retryAfterMs(response.headers[HttpHeaders.RetryAfter])
+                            ?: DEFAULT_RATE_LIMIT_WAIT_MS
+                    }
+                }
+
+                is AppHttpException ->
+                    if (status == RATE_LIMIT_STATUS) DEFAULT_RATE_LIMIT_WAIT_MS else null
+
+                else -> null
+            }
+
+        fun retryAfterMs(header: String?): Long? =
+            header
+                ?.trim()
+                ?.toLongOrNull()
+                ?.takeIf { it > 0 }
+                ?.times(1_000)
     }
 }
