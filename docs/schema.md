@@ -45,6 +45,8 @@ erDiagram
         text renewalReminderSentAt
         text renewalRequestedAt
         integer lateFeeAccrued
+        text fineFinalizedAt
+        text fineSettledAt
     }
     RequestItem {
         text id PK

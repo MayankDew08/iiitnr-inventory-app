@@ -34,6 +34,19 @@ export const requestStatus = pgEnum('RequestStatus', [
   'REQUESTED_RENEW',
 ]);
 export const userRole = pgEnum('UserRole', ['ADMIN', 'FACULTY', 'PENDING', 'STUDENT', 'LA']);
+export const paymentStatus = pgEnum('PaymentStatus', [
+  'PENDING',
+  'SUBMITTED',
+  'VERIFIED',
+  'REJECTED',
+]);
+export const paymentRejectionReason = pgEnum('PaymentRejectionReason', [
+  'UTR_NOT_FOUND',
+  'AMOUNT_MISMATCH',
+  'PROOF_UNCLEAR',
+  'DUPLICATE_PAYMENT',
+  'OTHER',
+]);
 
 export const prismaMigrations = pgTable('_prisma_migrations', {
   id: varchar({ length: 36 }).primaryKey().notNull(),
@@ -93,6 +106,8 @@ export const request = pgTable(
     renewalReminderSentAt: timestamp({ precision: 3, mode: 'string' }),
     renewalRequestedAt: timestamp({ precision: 3, mode: 'string' }),
     lateFeeAccrued: integer().default(0).notNull(),
+    fineFinalizedAt: timestamp({ precision: 3, mode: 'string' }),
+    fineSettledAt: timestamp({ precision: 3, mode: 'string' }),
   },
   (table) => [
     index('Request_targetFacultyId_idx').using(
@@ -312,5 +327,92 @@ export const requestEmail = pgTable(
     })
       .onUpdate('cascade')
       .onDelete('cascade'),
+  ],
+);
+
+export const payment = pgTable(
+  'Payment',
+  {
+    id: text().primaryKey().notNull(),
+    userId: text().notNull(),
+    amount: integer().notNull(),
+    status: paymentStatus().default('PENDING').notNull(),
+    utr: text(),
+    proofFileName: text(),
+    createdAt: timestamp({ precision: 3, mode: 'string' })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+    submittedAt: timestamp({ precision: 3, mode: 'string' }),
+    verifiedAt: timestamp({ precision: 3, mode: 'string' }),
+    rejectedAt: timestamp({ precision: 3, mode: 'string' }),
+    verifiedByUserId: text(),
+    rejectionReason: text(),
+    rejectionReasonCode: paymentRejectionReason(),
+  },
+  (table) => [
+    index('Payment_userId_idx').using('btree', table.userId.asc().nullsLast().op('text_ops')),
+    index('Payment_status_idx').using('btree', table.status.asc().nullsLast()),
+    uniqueIndex('Payment_one_active_per_user')
+      .using('btree', table.userId.asc().nullsLast().op('text_ops'))
+      .where(sql`status IN ('PENDING','SUBMITTED')`),
+    uniqueIndex('Payment_utr_active_key')
+      .using('btree', table.utr.asc().nullsLast().op('text_ops'))
+      .where(sql`status IN ('SUBMITTED','VERIFIED')`),
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [user.id],
+      name: 'Payment_userId_fkey',
+    })
+      .onUpdate('cascade')
+      .onDelete('restrict'),
+    foreignKey({
+      columns: [table.verifiedByUserId],
+      foreignColumns: [user.id],
+      name: 'Payment_verifiedByUserId_fkey',
+    })
+      .onUpdate('cascade')
+      .onDelete('restrict'),
+  ],
+);
+
+export const paymentAllocation = pgTable(
+  'PaymentAllocation',
+  {
+    id: text().primaryKey().notNull(),
+    paymentId: text().notNull(),
+    requestId: text().notNull(),
+    amount: integer().notNull(),
+    createdAt: timestamp({ precision: 3, mode: 'string' })
+      .default(sql`CURRENT_TIMESTAMP`)
+      .notNull(),
+  },
+  (table) => [
+    index('PaymentAllocation_paymentId_idx').using(
+      'btree',
+      table.paymentId.asc().nullsLast().op('text_ops'),
+    ),
+    index('PaymentAllocation_requestId_idx').using(
+      'btree',
+      table.requestId.asc().nullsLast().op('text_ops'),
+    ),
+    uniqueIndex('PaymentAllocation_paymentId_requestId_key').using(
+      'btree',
+      table.paymentId.asc().nullsLast().op('text_ops'),
+      table.requestId.asc().nullsLast().op('text_ops'),
+    ),
+    foreignKey({
+      columns: [table.paymentId],
+      foreignColumns: [payment.id],
+      name: 'PaymentAllocation_paymentId_fkey',
+    })
+      .onUpdate('cascade')
+      .onDelete('cascade'),
+    foreignKey({
+      columns: [table.requestId],
+      foreignColumns: [request.id],
+      name: 'PaymentAllocation_requestId_fkey',
+    })
+      .onUpdate('cascade')
+      .onDelete('restrict'),
   ],
 );

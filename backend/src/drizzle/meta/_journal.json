@@ -106,6 +106,20 @@
       "when": 1792600000000,
       "tag": "0015_brisk_kitten_mori",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1795258299572,
+      "tag": "0016_fine_lifecycle_and_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1795292279459,
+      "tag": "0017_backfill_fine_finalized",
+      "breakpoints": true
     }
   ]
 }
