@@ -220,11 +220,11 @@ kotlin {
             }
         }
 
-        val jvmTest =
-            sourceSets.findByName("jvmTest") ?: create("jvmTest")
-        jvmTest.dependsOn(commonTest)
+        val jvmTest = sourceSets.getByName("jvmTest")
         jvmTest.dependencies {
-            implementation(compose.desktop.uiTestJUnit4)
+            implementation(
+                "org.jetbrains.compose.ui:ui-test-junit4:${libs.versions.composeMultiplatform.get()}",
+            )
             implementation(compose.desktop.currentOs)
         }
 
@@ -294,4 +294,8 @@ ktlint {
 dependencies {
     val composeVersion = libs.versions.composeMultiplatform.get()
     add("androidRuntimeClasspath", "org.jetbrains.compose.ui:ui-tooling:$composeVersion")
+}
+
+tasks.withType<Test>().configureEach {
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
