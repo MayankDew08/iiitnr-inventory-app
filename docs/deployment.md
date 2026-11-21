@@ -71,7 +71,8 @@ User-uploaded files live on a **persistent volume**, the same way `uploads/`
 - `uploads/` — publicly served component images.
 - `private-uploads/payments/` — payment proof screenshots. The public file
   server does **not** serve this folder; proofs are only returned by the
-  authenticated `GET /api/payments/:id/proof` route (owner, LA or admin), so
+  authenticated `GET /payments/:id/proof` route (owner, LA or admin, reached
+  as `/api/payments/:id/proof` through Caddy in production), so
   no public URL ever exposes them.
 
 Both folders must be on persistent storage in the deployment (a mounted

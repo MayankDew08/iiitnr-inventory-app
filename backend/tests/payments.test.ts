@@ -581,7 +581,7 @@ describe('POST /payments/:id/submit', () => {
     assert.equal(submitted.status, 'SUBMITTED');
     assert.equal(submitted.utr, '123456789012');
     assert.ok(submitted.submittedAt);
-    assert.ok(submitted.proofImageUrl.includes('/api/payments/'));
+    assert.ok(submitted.proofImageUrl.includes('/payments/'));
     assert.ok(submitted.proofImageUrl.endsWith('.webp'));
 
     const stored = await getPaymentRow(paymentId);
@@ -753,7 +753,7 @@ describe('GET /payments/mine', () => {
     assert.equal(payments.length, 1);
     assert.equal(payments[0].status, 'SUBMITTED');
     assert.equal(payments[0].utr, '123456789018');
-    assert.ok(payments[0].proofImageUrl.includes('/api/payments/'));
+    assert.ok(payments[0].proofImageUrl.includes('/payments/'));
     assert.ok(payments[0].submittedAt);
   });
 

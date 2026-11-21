@@ -81,7 +81,7 @@ function normalizeUploadPath(base: string, rawName: string): string | null {
 
 /**
  * Stored as a bare file name only; the API maps it to `proofImageUrl`
- * (`/api/payments/{id}/proof`) via toPaymentDto, so the raw disk layout is
+ * (`/payments/{id}/proof`) via toPaymentDto, so the raw disk layout is
  * never part of the wire format.
  */
 function deleteUploadedFile(target: string): void {

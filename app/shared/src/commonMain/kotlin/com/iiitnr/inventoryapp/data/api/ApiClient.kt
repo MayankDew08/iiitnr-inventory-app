@@ -101,4 +101,12 @@ object ApiClient {
 
     /** Scheme and host of the server this client talks to, without the `/api` prefix. */
     val serverOrigin: String = BASE_URL.removeSuffix("/api")
+
+    /**
+     * Full base URL including the `/api` segment where production terminates
+     * it (Caddy strips `/api` before forwarding). In dev this is bare
+     * `http://localhost:4000`, so server-relative paths from the backend must
+     * be joined against *this*, not [serverOrigin].
+     */
+    val baseUrl: String = BASE_URL
 }

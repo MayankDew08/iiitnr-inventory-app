@@ -76,8 +76,9 @@ function isUniqueViolationOnConstraint(err: unknown, constraint: string): boolea
 /**
  * Public shape of a payment: `proofFileName` (a bare file name on disk) is
  * never exposed; the app only ever sees `proofImageUrl` pointing at the
- * authenticated `/api/payments/{id}/proof` route, or null when there is no
- * proof on disk.
+ * authenticated `/payments/{id}/proof` route (Caddy adds the `/api` prefix
+ * in production; the app's ApiClient prepends its base URL in dev), or null
+ * when there is no proof on disk.
  */
 export type PaymentDto = Omit<PaymentRecord, 'proofFileName'> & {
   proofImageUrl: string | null;
@@ -91,7 +92,7 @@ export function toPaymentDto<T extends PaymentRecord>(
   const { proofFileName, ...rest } = record;
   return {
     ...rest,
-    proofImageUrl: proofFileName ? `/api/payments/${record.id}/proof` : null,
+    proofImageUrl: proofFileName ? `/payments/${record.id}/proof` : null,
   };
 }
 

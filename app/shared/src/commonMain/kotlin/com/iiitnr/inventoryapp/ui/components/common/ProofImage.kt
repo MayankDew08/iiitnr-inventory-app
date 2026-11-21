@@ -30,13 +30,14 @@ import com.iiitnr.inventoryapp.data.api.ApiClient
 import io.ktor.http.HttpHeaders
 
 /**
- * Proofs are stored as server-relative paths (`/api/payments/{id}/proof`).
- * Prefix the server this client is connected to. Older rows hold absolute
- * URLs, which are returned unchanged.
+ * Proofs are returned as API-relative paths (`/payments/{id}/proof`). Join
+ * them with the client's full base URL — in dev that is `http://localhost:4000`
+ * (no `/api` prefix), in production it is `https://.../api` and Caddy strips
+ * `/api` before forwarding. Older rows hold absolute URLs, returned unchanged.
  */
 fun resolveProofUrl(url: String?): String? {
     if (url.isNullOrBlank()) return url
-    return if (url.startsWith("/")) ApiClient.serverOrigin + url else url.replace("http://", "https://")
+    return if (url.startsWith("/")) ApiClient.baseUrl + url else url
 }
 
 /**
