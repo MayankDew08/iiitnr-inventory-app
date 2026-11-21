@@ -73,4 +73,5 @@ docker-data/
 certs/
 
 uploads/
+private-uploads/
 VERSION

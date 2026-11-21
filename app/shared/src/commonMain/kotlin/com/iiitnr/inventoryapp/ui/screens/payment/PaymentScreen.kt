@@ -13,6 +13,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -43,6 +45,7 @@ fun PaymentScreen(
             )
         },
     ) { paddingValues ->
+        val authToken by viewModel.token.collectAsState(initial = null)
         Box(
             modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             contentAlignment = Alignment.TopCenter,
@@ -76,7 +79,7 @@ fun PaymentScreen(
                     )
 
                 is PaymentUiState.Submitted ->
-                    SubmittedScreen(payment = state.payment, onBackToFines = onDone)
+                    SubmittedScreen(payment = state.payment, authToken = authToken, onBackToFines = onDone)
 
                 is PaymentUiState.Error ->
                     ErrorState(message = state.message, onRetry = viewModel::onRetry)

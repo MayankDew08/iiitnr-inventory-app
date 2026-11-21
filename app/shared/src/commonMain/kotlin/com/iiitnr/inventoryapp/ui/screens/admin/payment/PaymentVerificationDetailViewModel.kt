@@ -12,6 +12,7 @@ import com.iiitnr.inventoryapp.data.models.PaymentRejectionReason
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -51,6 +52,9 @@ class PaymentVerificationDetailViewModel(
 
     val canReject: Boolean
         get() = selectedReason != null && notes.length <= MAX_REJECT_NOTES
+
+    /** Session token stream; the screen uses it for the authenticated proof image. */
+    val token: Flow<String?> get() = tokenManager.token
 
     private var lastDetail: PaymentDetail? = null
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.iiitnr.inventoryapp.data.api.PaymentApi
 import com.iiitnr.inventoryapp.data.models.AppHttpException
 import com.iiitnr.inventoryapp.data.models.Payment
+import com.iiitnr.inventoryapp.data.models.PaymentErrorCodes
 import com.iiitnr.inventoryapp.data.models.PaymentUpiInfo
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.ui.platform.ProofPicker
@@ -16,6 +17,7 @@ import com.iiitnr.inventoryapp.utils.LaunchResult
 import com.iiitnr.inventoryapp.utils.UpiUri
 import com.iiitnr.inventoryapp.utils.toAppError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -58,6 +60,9 @@ sealed interface PaymentUiState {
 
 private const val MAX_PROOF_BYTES = 10 * 1024 * 1024
 
+/** A UTR is exactly 12 digits; the server re-checks the same rule. */
+private const val UTR_LENGTH = 12
+
 private val ALLOWED_PROOF_MIMES =
     setOf("image/jpeg", "image/png", "image/webp", "image/gif", "image/avif")
 
@@ -70,11 +75,14 @@ class PaymentViewModel(
     var uiState: PaymentUiState by mutableStateOf(PaymentUiState.Idle)
         private set
 
-    /** True only when both a trimmed UTR and an accepted screenshot are present. */
+    /** Session token stream; screens use it for authenticated proof images. */
+    val token: Flow<String?> get() = tokenManager.token
+
+    /** True only when the UTR is exactly 12 digits and a screenshot is attached. */
     val canSubmit: Boolean
         get() =
             (uiState as? PaymentUiState.EnteringUtr)?.let { state ->
-                state.utr.isNotBlank() && state.proof != null && state.proofMime != null
+                state.utr.length == UTR_LENGTH && state.proof != null && state.proofMime != null
             } ?: false
 
     private var currentPayment: Payment? = null
@@ -102,10 +110,7 @@ class PaymentViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: AppHttpException) {
-                uiState =
-                    PaymentUiState.Error(
-                        if (e.errorCode == "no_unpaid_fines") "No fines to pay" else e.toAppError().message,
-                    )
+                uiState = PaymentUiState.Error(friendlyPaymentMessage(e))
             } catch (e: Exception) {
                 uiState = PaymentUiState.Error(e.toAppError().message)
             }
@@ -174,7 +179,7 @@ class PaymentViewModel(
 
     fun onUtrChanged(utr: String) {
         val state = uiState as? PaymentUiState.EnteringUtr ?: return
-        uiState = state.copy(utr = utr, submitError = null)
+        uiState = state.copy(utr = utr.filter { it.isDigit() }.take(UTR_LENGTH), submitError = null)
     }
 
     fun onPickProof() {
@@ -229,10 +234,12 @@ class PaymentViewModel(
                 throw e
             } catch (e: AppHttpException) {
                 uiState =
-                    if (e.status == 409) {
+                    if (e.errorCode == "PAYMENT_NOT_PENDING") {
+                        // Already submitted server-side (e.g. a retry after a
+                        // lost response): recover to the submitted screen.
                         PaymentUiState.Submitted(payment)
                     } else {
-                        state.copy(submitError = e.toAppError().message)
+                        state.copy(submitError = friendlyPaymentMessage(e))
                     }
             } catch (e: Exception) {
                 uiState = state.copy(submitError = e.toAppError().message)
@@ -253,6 +260,17 @@ class PaymentViewModel(
         if (uiState is PaymentUiState.Error) onPayTapped()
     }
 }
+
+/** Student-friendly message for each backend payment error code. */
+private suspend fun friendlyPaymentMessage(error: AppHttpException): String =
+    when (error.errorCode) {
+        PaymentErrorCodes.NO_UNPAID_FINES -> "No fines to pay"
+        PaymentErrorCodes.PAYMENT_AWAITING_VERIFICATION -> "Your payment is awaiting verification"
+        PaymentErrorCodes.INVALID_UTR -> "Enter the 12-digit UTR from your payment receipt"
+        PaymentErrorCodes.UTR_ALREADY_USED -> "This UTR has already been used for another payment"
+        PaymentErrorCodes.UTR_BLOCKED -> "This UTR cannot be used again"
+        else -> error.toAppError().message
+    }
 
 internal fun proofMime(filename: String): String? =
     when (filename.substringAfterLast('.', "").lowercase()) {

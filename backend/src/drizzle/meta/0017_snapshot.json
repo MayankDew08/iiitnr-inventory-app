@@ -148,12 +148,8 @@
           "name": "AuditLog_userId_fkey",
           "tableFrom": "AuditLog",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "cascade"
         }
@@ -346,12 +342,8 @@
           "name": "Notification_recipientId_fkey",
           "tableFrom": "Notification",
           "tableTo": "User",
-          "columnsFrom": [
-            "recipientId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["recipientId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "cascade"
         },
@@ -359,12 +351,8 @@
           "name": "Notification_requestId_fkey",
           "tableFrom": "Notification",
           "tableTo": "Request",
-          "columnsFrom": [
-            "requestId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requestId"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "cascade"
         }
@@ -493,12 +481,8 @@
           "name": "Payment_userId_fkey",
           "tableFrom": "Payment",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
@@ -506,12 +490,8 @@
           "name": "Payment_verifiedByUserId_fkey",
           "tableFrom": "Payment",
           "tableTo": "User",
-          "columnsFrom": [
-            "verifiedByUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["verifiedByUserId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         }
@@ -620,12 +600,8 @@
           "name": "PaymentAllocation_paymentId_fkey",
           "tableFrom": "PaymentAllocation",
           "tableTo": "Payment",
-          "columnsFrom": [
-            "paymentId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["paymentId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "cascade"
         },
@@ -633,12 +609,8 @@
           "name": "PaymentAllocation_requestId_fkey",
           "tableFrom": "PaymentAllocation",
           "tableTo": "Request",
-          "columnsFrom": [
-            "requestId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requestId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         }
@@ -883,12 +855,8 @@
           "name": "Request_targetFacultyId_fkey",
           "tableFrom": "Request",
           "tableTo": "User",
-          "columnsFrom": [
-            "targetFacultyId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["targetFacultyId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
@@ -896,12 +864,8 @@
           "name": "Request_userId_fkey",
           "tableFrom": "Request",
           "tableTo": "User",
-          "columnsFrom": [
-            "userId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         }
@@ -1041,12 +1005,8 @@
           "name": "RequestEmail_requestId_fkey",
           "tableFrom": "RequestEmail",
           "tableTo": "Request",
-          "columnsFrom": [
-            "requestId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requestId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "cascade"
         },
@@ -1054,12 +1014,8 @@
           "name": "RequestEmail_recipientId_fkey",
           "tableFrom": "RequestEmail",
           "tableTo": "User",
-          "columnsFrom": [
-            "recipientId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["recipientId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "cascade"
         }
@@ -1172,12 +1128,8 @@
           "name": "RequestItem_componentId_fkey",
           "tableFrom": "RequestItem",
           "tableTo": "Component",
-          "columnsFrom": [
-            "componentId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["componentId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         },
@@ -1185,12 +1137,8 @@
           "name": "RequestItem_requestId_fkey",
           "tableFrom": "RequestItem",
           "tableTo": "Request",
-          "columnsFrom": [
-            "requestId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requestId"],
+          "columnsTo": ["id"],
           "onDelete": "restrict",
           "onUpdate": "cascade"
         }
@@ -1334,42 +1282,22 @@
     "public.ComponentCategory": {
       "name": "ComponentCategory",
       "schema": "public",
-      "values": [
-        "Sensors",
-        "Actuators",
-        "Microcontrollers",
-        "Microprocessors",
-        "Others"
-      ]
+      "values": ["Sensors", "Actuators", "Microcontrollers", "Microprocessors", "Others"]
     },
     "public.Location": {
       "name": "Location",
       "schema": "public",
-      "values": [
-        "IoT_Lab",
-        "Robo_Lab",
-        "VLSI_Lab"
-      ]
+      "values": ["IoT_Lab", "Robo_Lab", "VLSI_Lab"]
     },
     "public.PaymentStatus": {
       "name": "PaymentStatus",
       "schema": "public",
-      "values": [
-        "PENDING",
-        "SUBMITTED",
-        "VERIFIED",
-        "REJECTED"
-      ]
+      "values": ["PENDING", "SUBMITTED", "VERIFIED", "REJECTED"]
     },
     "public.RequestEmailKind": {
       "name": "RequestEmailKind",
       "schema": "public",
-      "values": [
-        "RENEWAL_CHASE",
-        "EXPIRY_NOTICE",
-        "LATE_FEE",
-        "RENEWAL_REMINDER"
-      ]
+      "values": ["RENEWAL_CHASE", "EXPIRY_NOTICE", "LATE_FEE", "RENEWAL_REMINDER"]
     },
     "public.RequestStatus": {
       "name": "RequestStatus",
@@ -1390,13 +1318,7 @@
     "public.UserRole": {
       "name": "UserRole",
       "schema": "public",
-      "values": [
-        "ADMIN",
-        "FACULTY",
-        "PENDING",
-        "STUDENT",
-        "LA"
-      ]
+      "values": ["ADMIN", "FACULTY", "PENDING", "STUDENT", "LA"]
     }
   },
   "schemas": {},

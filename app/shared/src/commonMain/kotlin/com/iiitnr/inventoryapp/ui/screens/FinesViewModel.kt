@@ -13,6 +13,7 @@ import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.storage.TokenManager
 import com.iiitnr.inventoryapp.utils.toAppError
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -39,6 +40,9 @@ class FinesViewModel(
         private set
     var errorMessage: String? by mutableStateOf(null)
         private set
+
+    /** Session token stream; screens use it for authenticated proof images. */
+    val token: Flow<String?> get() = tokenManager.token
 
     val totalOwed: Int get() = computeTotalOwed(fines)
 

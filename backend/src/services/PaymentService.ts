@@ -50,8 +50,73 @@ const PAYMENT_REJECTION_LABELS: Record<PaymentRejectionReasonValue, string> = {
 // The "delete the dead PENDING" branch must commit before the 400 is raised;
 // throwing inside the transaction would roll the delete back.
 type CreateIntentResult =
-  | { ok: true; payment: PaymentWithAllocations }
-  | { ok: false; error: DomainError };
+  { ok: true; payment: PaymentWithAllocations } | { ok: false; error: DomainError };
+
+const UNIQUE_VIOLATION = '23505';
+
+function isUniqueViolationOnConstraint(err: unknown, constraint: string): boolean {
+  let current: unknown = err;
+  for (let depth = 0; depth < 5 && current; depth++) {
+    if (
+      typeof current === 'object' &&
+      current !== null &&
+      (current as { code?: unknown }).code === UNIQUE_VIOLATION &&
+      (current as { constraint?: unknown }).constraint === constraint
+    ) {
+      return true;
+    }
+    current =
+      typeof current === 'object' && current !== null
+        ? (current as { cause?: unknown }).cause
+        : undefined;
+  }
+  return false;
+}
+
+/**
+ * Public shape of a payment: `proofFileName` (a bare file name on disk) is
+ * never exposed; the app only ever sees `proofImageUrl` pointing at the
+ * authenticated `/api/payments/{id}/proof` route, or null when there is no
+ * proof on disk.
+ */
+export type PaymentDto = Omit<PaymentRecord, 'proofFileName'> & {
+  proofImageUrl: string | null;
+};
+
+export function toPaymentDto<T extends PaymentRecord>(
+  record: T,
+): Omit<T, 'proofFileName'> & {
+  proofImageUrl: string | null;
+} {
+  const { proofFileName, ...rest } = record;
+  return {
+    ...rest,
+    proofImageUrl: proofFileName ? `/api/payments/${record.id}/proof` : null,
+  };
+}
+
+/** The student's one active (PENDING/SUBMITTED) payment, if any, with its allocations. */
+async function findActivePayment(userId: string): Promise<PaymentWithAllocations | null> {
+  const [row] = await db
+    .select()
+    .from(payment)
+    .where(and(eq(payment.userId, userId), inArray(payment.status, ['PENDING', 'SUBMITTED'])))
+    .limit(1);
+  if (!row) {
+    return null;
+  }
+  const allocations = await db
+    .select()
+    .from(paymentAllocation)
+    .where(eq(paymentAllocation.paymentId, row.id));
+  return { ...row, allocations };
+}
+
+/** A single payment row by id, or null when there is no such payment. */
+export async function getPaymentById(paymentId: string): Promise<PaymentRecord | null> {
+  const [row] = await db.select().from(payment).where(eq(payment.id, paymentId)).limit(1);
+  return row ?? null;
+}
 
 /**
  * Returns the student's PENDING payment, refreshed against the current set of
@@ -59,7 +124,56 @@ type CreateIntentResult =
  * computed here from the database; any amount supplied by a client is ignored.
  */
 export async function createPaymentIntent(userId: string): Promise<PaymentWithAllocations> {
-  const result = await db.transaction(async (tx): Promise<CreateIntentResult> => {
+  let result: CreateIntentResult;
+  try {
+    result = await runCreateIntent(userId);
+  } catch (err) {
+    // B2: two concurrent first-time calls can both miss the PENDING lookup
+    // (FOR UPDATE has no row to lock) and race to insert. The partial unique
+    // index Payment_one_active_per_user lets exactly one of them win; the
+    // loser re-reads the winner's row instead of failing.
+    if (isUniqueViolationOnConstraint(err, 'Payment_one_active_per_user')) {
+      const active = await findActivePayment(userId);
+      if (active) {
+        if (active.status === 'SUBMITTED') {
+          throw new DomainError(
+            409,
+            'payment_awaiting_verification',
+            'PAYMENT_AWAITING_VERIFICATION',
+          );
+        }
+        return active;
+      }
+    }
+    throw err;
+  }
+  if (!result.ok) {
+    throw result.error;
+  }
+  return result.payment;
+}
+
+async function runCreateIntent(userId: string): Promise<CreateIntentResult> {
+  return db.transaction(async (tx): Promise<CreateIntentResult> => {
+    // B1: one active payment per student. Active means PENDING or SUBMITTED;
+    // a SUBMITTED payment means money is already in flight, so the student
+    // must not start a second one. Return (not throw) so the transaction
+    // commits and nothing rolls back by accident.
+    const [submitted] = await tx
+      .select()
+      .from(payment)
+      .where(and(eq(payment.userId, userId), eq(payment.status, 'SUBMITTED')))
+      .limit(1);
+    if (submitted) {
+      return {
+        ok: false,
+        error: new DomainError(
+          409,
+          'payment_awaiting_verification',
+          'PAYMENT_AWAITING_VERIFICATION',
+        ),
+      };
+    }
     const [existing] = await tx
       .select()
       .from(payment)
@@ -102,9 +216,7 @@ export async function createPaymentIntent(userId: string): Promise<PaymentWithAl
       )
         .map((allocation) => allocation.requestId)
         .sort();
-      const fineIds = fines
-        .map((fine) => fine.id)
-        .sort();
+      const fineIds = fines.map((fine) => fine.id).sort();
       const unchanged =
         currentIds.length === fineIds.length &&
         currentIds.every((id, index) => id === fineIds[index]);
@@ -182,12 +294,6 @@ export async function createPaymentIntent(userId: string): Promise<PaymentWithAl
 
     return { ok: true, payment: { ...created, allocations } };
   });
-
-  if (!result.ok) {
-    throw result.error;
-  }
-
-  return result.payment;
 }
 
 /**
@@ -199,7 +305,10 @@ export async function listMyPayments(userId: string): Promise<PaymentWithAllocat
     .select()
     .from(payment)
     .where(
-      and(eq(payment.userId, userId), inArray(payment.status, ['PENDING', 'SUBMITTED', 'REJECTED'])),
+      and(
+        eq(payment.userId, userId),
+        inArray(payment.status, ['PENDING', 'SUBMITTED', 'REJECTED']),
+      ),
     )
     .orderBy(desc(payment.createdAt));
 
@@ -229,20 +338,18 @@ export async function listMyPayments(userId: string): Promise<PaymentWithAllocat
 
 /**
  * Stamps the UTR and proof on a PENDING payment. A payment is immutable once
- * submitted: only PENDING → SUBMITTED is allowed.
+ * submitted: only PENDING → SUBMITTED is allowed. `proofFileName` is only the
+ * file name on disk; API responses map it to `proofImageUrl` (see
+ * toPaymentDto). The UTR must already be normalized to 12 digits by the caller.
  */
 export function submitPayment(
   paymentId: string,
   userId: string,
   utr: string,
-  proofImageUrl: string,
+  proofFileName: string,
 ): Promise<PaymentRecord> {
   return db.transaction(async (tx) => {
-    const [locked] = await tx
-      .select()
-      .from(payment)
-      .where(eq(payment.id, paymentId))
-      .for('update');
+    const [locked] = await tx.select().from(payment).where(eq(payment.id, paymentId)).for('update');
 
     if (!locked) {
       throw new NotFoundError('Payment', paymentId);
@@ -258,16 +365,42 @@ export function submitPayment(
       throw new DomainError(409, 'payment_not_pending', 'PAYMENT_NOT_PENDING');
     }
 
-    const [updated] = await tx
-      .update(payment)
-      .set({
-        status: 'SUBMITTED',
-        utr,
-        proofImageUrl,
-        submittedAt: new Date().toISOString(),
-      })
-      .where(eq(payment.id, paymentId))
-      .returning();
+    // A UTR rejected as not-found or duplicate stays blocked forever. One
+    // rejected as PROOF_UNCLEAR or OTHER may be retried (the student
+    // re-uploads a clearer screenshot of the same payment).
+    const [blocked] = await tx
+      .select({ id: payment.id })
+      .from(payment)
+      .where(
+        and(
+          eq(payment.utr, utr),
+          eq(payment.status, 'REJECTED'),
+          inArray(payment.rejectionReasonCode, ['UTR_NOT_FOUND', 'DUPLICATE_PAYMENT']),
+        ),
+      )
+      .limit(1);
+    if (blocked) {
+      throw new DomainError(409, 'utr_blocked', 'UTR_BLOCKED');
+    }
+
+    let updated: PaymentRecord | undefined;
+    try {
+      [updated] = await tx
+        .update(payment)
+        .set({
+          status: 'SUBMITTED',
+          utr,
+          proofFileName,
+          submittedAt: new Date().toISOString(),
+        })
+        .where(eq(payment.id, paymentId))
+        .returning();
+    } catch (err) {
+      if (isUniqueViolationOnConstraint(err, 'Payment_utr_active_key')) {
+        throw new DomainError(409, 'utr_already_used', 'UTR_ALREADY_USED');
+      }
+      throw err;
+    }
 
     if (!updated) {
       throw new Error('failed to submit payment');
@@ -379,13 +512,21 @@ export async function verifyPayment(
     // Lock allocated requests in a stable order so concurrent verifies and
     // return transactions cannot deadlock each other.
     const requestIds = allocations.map((allocation) => allocation.requestId).sort();
+    let alreadySettled = false;
     if (requestIds.length > 0) {
-      await tx
-        .select({ id: request.id })
+      const lockedRequests = await tx
+        .select({ id: request.id, fineSettledAt: request.fineSettledAt })
         .from(request)
         .where(inArray(request.id, requestIds))
         .orderBy(request.id)
         .for('update');
+      alreadySettled = lockedRequests.some((row) => row.fineSettledAt != null);
+    }
+
+    // B1 backup behind the one-active-per-student index: settling an
+    // already-settled fine would double-count it.
+    if (alreadySettled) {
+      throw new DomainError(409, 'fine_already_settled', 'FINE_ALREADY_SETTLED');
     }
 
     const now = new Date().toISOString();

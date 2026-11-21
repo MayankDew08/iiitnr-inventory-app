@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { buildApp } from '../src/app.js';
 import { db } from '../src/drizzle/db.js';
 import {
@@ -32,7 +32,7 @@ let laId: string;
 
 const createdUserIds: string[] = [];
 
-const UPLOADS_PAYMENTS_DIR = join(process.cwd(), 'uploads', 'payments');
+const PROOFS_PAYMENTS_DIR = join(process.cwd(), 'private-uploads', 'payments');
 
 const VALID_PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -43,11 +43,11 @@ const VALID_PNG = Buffer.from([
 ]);
 
 function cleanUploadsDir() {
-  if (!existsSync(UPLOADS_PAYMENTS_DIR)) return;
-  for (const file of readdirSync(UPLOADS_PAYMENTS_DIR)) {
+  if (!existsSync(PROOFS_PAYMENTS_DIR)) return;
+  for (const file of readdirSync(PROOFS_PAYMENTS_DIR)) {
     if (file === '.gitkeep') continue;
     try {
-      unlinkSync(join(UPLOADS_PAYMENTS_DIR, file));
+      unlinkSync(join(PROOFS_PAYMENTS_DIR, file));
     } catch {
       /* ignore */
     }
@@ -214,7 +214,7 @@ function reject(
 }
 
 /** Seeds a real intent + UTR submission so allocations are present. */
-async function seedSubmittedPayment(amounts: number[], utr = 'UTR-LA-001') {
+async function seedSubmittedPayment(amounts: number[], utr = '100000000001') {
   const fines = [];
   for (const amount of amounts) {
     fines.push(await seedFine(studentId, amount));
@@ -228,6 +228,26 @@ async function seedSubmittedPayment(amounts: number[], utr = 'UTR-LA-001') {
   ]);
   assert.equal(submitted.statusCode, 200);
   return { paymentId, fines, submittedAt: submitted.json().payment.submittedAt as string };
+}
+
+/**
+ * Inserts a SUBMITTED row directly, bypassing the one-active-per-student
+ * API guard. For tests that need legacy rows the API can no longer create
+ * (e.g. queue ordering with two submitted payments for one student).
+ */
+async function seedSubmittedRowDirect(amount: number, utr: string) {
+  const nowIso = new Date().toISOString();
+  const paymentId = randomUUID();
+  await db.insert(payment).values({
+    id: paymentId,
+    userId: studentId,
+    amount,
+    status: 'SUBMITTED',
+    utr,
+    createdAt: nowIso,
+    submittedAt: nowIso,
+  });
+  return { paymentId, submittedAt: nowIso };
 }
 
 async function seedPaymentWithStatus(status: 'PENDING' | 'VERIFIED' | 'REJECTED') {
@@ -363,10 +383,7 @@ describe('POST /payments', () => {
     const allocatedRequestIds = body.payment.allocations
       .map((allocation: { requestId: string }) => allocation.requestId)
       .sort();
-    assert.deepEqual(
-      allocatedRequestIds,
-      fines.map((fine) => fine.id).sort(),
-    );
+    assert.deepEqual(allocatedRequestIds, fines.map((fine) => fine.id).sort());
 
     assert.equal(body.upi.reference, body.payment.id.replaceAll('-', ''));
     assert.ok(
@@ -555,27 +572,26 @@ describe('POST /payments/:id/submit', () => {
     const paymentId = intent.json().payment.id as string;
 
     const response = await submit(studentToken, paymentId, [
-      { name: 'utr', value: '  UTR123456  ' },
+      { name: 'utr', value: '  123456789012  ' },
       proofPart(),
     ]);
 
     assert.equal(response.statusCode, 200);
     const submitted = response.json().payment;
     assert.equal(submitted.status, 'SUBMITTED');
-    assert.equal(submitted.utr, 'UTR123456');
+    assert.equal(submitted.utr, '123456789012');
     assert.ok(submitted.submittedAt);
-    assert.ok(submitted.proofImageUrl.includes('/uploads/payments/'));
+    assert.ok(submitted.proofImageUrl.includes('/api/payments/'));
     assert.ok(submitted.proofImageUrl.endsWith('.webp'));
 
     const stored = await getPaymentRow(paymentId);
     assert.ok(stored);
     assert.equal(stored.status, 'SUBMITTED');
-    assert.equal(stored.utr, 'UTR123456');
-    assert.ok(stored.proofImageUrl);
+    assert.equal(stored.utr, '123456789012');
+    assert.ok(stored.proofFileName);
+    assert.ok(!stored.proofFileName.includes('/'));
 
-    const proofFilename = stored.proofImageUrl?.split('/').pop();
-    assert.ok(proofFilename);
-    assert.ok(existsSync(join(UPLOADS_PAYMENTS_DIR, proofFilename)));
+    assert.ok(existsSync(join(PROOFS_PAYMENTS_DIR, stored.proofFileName)));
 
     const fineRow = await getRequestRow(fine.id);
     assert.equal(fineRow?.fineSettledAt, null);
@@ -600,7 +616,9 @@ describe('POST /payments/:id/submit', () => {
     const intent = await createIntent(studentToken);
     const paymentId = intent.json().payment.id as string;
 
-    const response = await submit(studentToken, paymentId, [{ name: 'utr', value: 'UTR123456' }]);
+    const response = await submit(studentToken, paymentId, [
+      { name: 'utr', value: '123456789013' },
+    ]);
 
     assert.equal(response.statusCode, 400);
     assert.equal(response.json().error, 'proof_required');
@@ -615,7 +633,7 @@ describe('POST /payments/:id/submit', () => {
     const paymentId = intent.json().payment.id as string;
 
     const response = await submit(otherStudentToken, paymentId, [
-      { name: 'utr', value: 'UTR123456' },
+      { name: 'utr', value: '123456789014' },
       proofPart(),
     ]);
 
@@ -625,7 +643,7 @@ describe('POST /payments/:id/submit', () => {
     assert.equal(stored?.status, 'PENDING');
     assert.equal(stored?.utr, null);
 
-    const leftovers = existsSync(UPLOADS_PAYMENTS_DIR) ? readdirSync(UPLOADS_PAYMENTS_DIR) : [];
+    const leftovers = existsSync(PROOFS_PAYMENTS_DIR) ? readdirSync(PROOFS_PAYMENTS_DIR) : [];
     assert.equal(leftovers.length, 0);
   });
 
@@ -635,13 +653,13 @@ describe('POST /payments/:id/submit', () => {
     const paymentId = intent.json().payment.id as string;
 
     const first = await submit(studentToken, paymentId, [
-      { name: 'utr', value: 'UTR123456' },
+      { name: 'utr', value: '123456789015' },
       proofPart(),
     ]);
     assert.equal(first.statusCode, 200);
 
     const second = await submit(studentToken, paymentId, [
-      { name: 'utr', value: 'UTR999999' },
+      { name: 'utr', value: '123456789016' },
       proofPart(),
     ]);
 
@@ -649,7 +667,7 @@ describe('POST /payments/:id/submit', () => {
     assert.equal(second.json().code, 'PAYMENT_NOT_PENDING');
 
     const stored = await getPaymentRow(paymentId);
-    assert.equal(stored?.utr, 'UTR123456');
+    assert.equal(stored?.utr, '123456789015');
   });
 
   test('submitting a VERIFIED or REJECTED payment is rejected (409)', async () => {
@@ -672,7 +690,7 @@ describe('POST /payments/:id/submit', () => {
       assert.ok(seeded);
 
       const response = await submit(studentToken, seeded.id, [
-        { name: 'utr', value: 'UTR123456' },
+        { name: 'utr', value: '123456789017' },
         proofPart(),
       ]);
 
@@ -725,7 +743,7 @@ describe('GET /payments/mine', () => {
     const paymentId = intent.json().payment.id as string;
 
     const submitted = await submit(studentToken, paymentId, [
-      { name: 'utr', value: 'UTR-MINE-001' },
+      { name: 'utr', value: '123456789018' },
       proofPart(),
     ]);
     assert.equal(submitted.statusCode, 200);
@@ -734,8 +752,8 @@ describe('GET /payments/mine', () => {
     const payments = response.json().payments;
     assert.equal(payments.length, 1);
     assert.equal(payments[0].status, 'SUBMITTED');
-    assert.equal(payments[0].utr, 'UTR-MINE-001');
-    assert.ok(payments[0].proofImageUrl.includes('/uploads/payments/'));
+    assert.equal(payments[0].utr, '123456789018');
+    assert.ok(payments[0].proofImageUrl.includes('/api/payments/'));
     assert.ok(payments[0].submittedAt);
   });
 
@@ -813,11 +831,13 @@ describe('GET /payments/mine', () => {
       [2, 3000],
       [3, 2000],
     ]) {
+      // REJECTED rows: history never counts toward the one-active-per-student
+      // rule, so three of them can coexist for ordering checks.
       await db.insert(payment).values({
         id: randomUUID(),
         userId: studentId,
         amount,
-        status: 'PENDING',
+        status: 'REJECTED',
         createdAt: new Date(base + offset).toISOString(),
       });
     }
@@ -844,7 +864,7 @@ describe('payment lifecycle invariants', () => {
 
     const paymentId = intent.json().payment.id as string;
     const submitted = await submit(studentToken, paymentId, [
-      { name: 'utr', value: 'UTR123456' },
+      { name: 'utr', value: '123456789019' },
       proofPart(),
     ]);
     assert.equal(submitted.statusCode, 200);
@@ -1019,11 +1039,7 @@ describe('POST /payments/admin/:id/reject', () => {
   test('rejecting without a valid reasonCode returns 400', async () => {
     const { paymentId } = await seedSubmittedPayment([10]);
 
-    for (const payload of [
-      { reasonCode: 'NOT_A_REASON' },
-      { reasonCode: 123 },
-      {},
-    ]) {
+    for (const payload of [{ reasonCode: 'NOT_A_REASON' }, { reasonCode: 123 }, {}]) {
       const response = await reject(laToken, paymentId, payload);
       assert.equal(response.statusCode, 400);
       assert.equal(response.json().error, 'invalid reasonCode');
@@ -1051,7 +1067,9 @@ describe('POST /payments/admin/:id/reject', () => {
     assert.equal(blank.statusCode, 200);
     assert.equal((await getPaymentRow(paymentId))?.rejectionReason, null);
 
-    const second = await seedSubmittedPayment([10]);
+    // A second SUBMITTED payment for the same student can no longer be created
+    // through the API (one active payment per student), so seed it directly.
+    const second = await seedSubmittedRowDirect(10, '100000000102');
     const overlong = await reject(laToken, second.paymentId, {
       reasonCode: 'OTHER',
       notes: 'x'.repeat(501),
@@ -1109,8 +1127,10 @@ describe('POST /payments/admin/:id/reject', () => {
 
 describe('GET /payments/admin/pending', () => {
   test('returns SUBMITTED payments, oldest-first', async () => {
-    const first = await seedSubmittedPayment([10], 'UTR-OLDEST');
-    const second = await seedSubmittedPayment([20], 'UTR-NEWER');
+    // Two SUBMITTED payments for one student bypass the API: the one-active
+    // rule only governs creation, the queue must still order any legacy rows.
+    const first = await seedSubmittedRowDirect(10, '100000000201');
+    const second = await seedSubmittedRowDirect(20, '100000000202');
 
     const now = Date.parse(first.submittedAt);
     await db
@@ -1130,7 +1150,7 @@ describe('GET /payments/admin/pending', () => {
     assert.equal(rows[0].studentName, 'Paying Student');
     assert.ok(rows[0].studentEmail.startsWith('pay_student_'));
     assert.ok(rows[0].studentEmail.endsWith('@example.com'));
-    assert.equal(rows[0].utr, 'UTR-OLDEST');
+    assert.equal(rows[0].utr, '100000000201');
     assert.equal('proofImageUrl' in rows[0], false);
     assert.equal('allocations' in rows[0], false);
   });
@@ -1202,5 +1222,208 @@ describe('GET /payments/admin/:id', () => {
     const response = await getAdminDetail(studentToken, paymentId);
 
     assert.equal(response.statusCode, 403);
+  });
+});
+
+describe('one active payment per student (B1/B2)', () => {
+  test('POST /payments while a SUBMITTED payment exists returns 409 PAYMENT_AWAITING_VERIFICATION', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+    const before = await db.select().from(payment).where(eq(payment.userId, studentId));
+
+    const response = await createIntent(studentToken);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'PAYMENT_AWAITING_VERIFICATION');
+    const after = await db.select().from(payment).where(eq(payment.userId, studentId));
+    assert.equal(after.length, before.length);
+    assert.equal((await getPaymentRow(paymentId))?.status, 'SUBMITTED');
+  });
+
+  test('two parallel POST /payments calls return the same payment id, with only 1 active row', async () => {
+    await seedFine(studentId, 30);
+
+    const [first, second] = await Promise.all([
+      createIntent(studentToken),
+      createIntent(studentToken),
+    ]);
+
+    assert.equal(first.statusCode, 200);
+    assert.equal(second.statusCode, 200);
+    assert.equal(first.json().payment.id, second.json().payment.id);
+
+    const active = await db
+      .select()
+      .from(payment)
+      .where(and(eq(payment.userId, studentId), inArray(payment.status, ['PENDING', 'SUBMITTED'])));
+    assert.equal(active.length, 1);
+  });
+
+  test('verify returns 409 when an allocated fine is already settled, and nothing is written', async () => {
+    const { paymentId, fines } = await seedSubmittedPayment([10, 20]);
+    await db
+      .update(request)
+      .set({ fineSettledAt: new Date().toISOString() })
+      .where(eq(request.id, fines[0].id));
+
+    const response = await verify(laToken, paymentId);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'FINE_ALREADY_SETTLED');
+    assert.equal((await getPaymentRow(paymentId))?.status, 'SUBMITTED');
+    // Atomic: the other allocated fine must not have been settled either.
+    assert.equal((await getRequestRow(fines[1].id))?.fineSettledAt, null);
+  });
+});
+
+describe('UTR validation (S3)', () => {
+  test('11 digits and letters are rejected with 400 INVALID_UTR', async () => {
+    await seedFine(studentId, 20);
+    const intent = await createIntent(studentToken);
+    const paymentId = intent.json().payment.id as string;
+
+    for (const bad of ['12345678901', 'abcdefghijkl', 'UTR123456789']) {
+      const response = await submit(studentToken, paymentId, [
+        { name: 'utr', value: bad },
+        proofPart(),
+      ]);
+      assert.equal(response.statusCode, 400, `utr ${bad}`);
+      assert.equal(response.json().code, 'INVALID_UTR');
+    }
+    assert.equal((await getPaymentRow(paymentId))?.status, 'PENDING');
+    assert.equal((await getPaymentRow(paymentId))?.utr, null);
+  });
+
+  test('UTR with spaces is accepted and stored without spaces', async () => {
+    await seedFine(studentId, 20);
+    const intent = await createIntent(studentToken);
+    const paymentId = intent.json().payment.id as string;
+
+    const response = await submit(studentToken, paymentId, [
+      { name: 'utr', value: '1234 5678 9012' },
+      proofPart(),
+    ]);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((await getPaymentRow(paymentId))?.utr, '123456789012');
+  });
+
+  test('reusing a UTR on a second student while the first is SUBMITTED returns 409 UTR_ALREADY_USED', async () => {
+    const utr = '109876543210';
+    await seedSubmittedPayment([20], utr);
+
+    await seedFine(otherStudentId, 25);
+    const intent = await createIntent(otherStudentToken);
+    assert.equal(intent.statusCode, 200);
+    const otherPaymentId = intent.json().payment.id as string;
+
+    const response = await submit(otherStudentToken, otherPaymentId, [
+      { name: 'utr', value: utr },
+      proofPart(),
+    ]);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'UTR_ALREADY_USED');
+    assert.equal((await getPaymentRow(otherPaymentId))?.status, 'PENDING');
+  });
+
+  test('reusing a UTR after a PROOF_UNCLEAR rejection is accepted', async () => {
+    const utr = '109876543211';
+    const { paymentId } = await seedSubmittedPayment([20], utr);
+    const rejected = await reject(laToken, paymentId, { reasonCode: 'PROOF_UNCLEAR' });
+    assert.equal(rejected.statusCode, 200);
+
+    await seedFine(studentId, 30);
+    const intent = await createIntent(studentToken);
+    assert.equal(intent.statusCode, 200);
+    const freshId = intent.json().payment.id as string;
+    assert.notEqual(freshId, paymentId);
+
+    const response = await submit(studentToken, freshId, [
+      { name: 'utr', value: utr },
+      proofPart(),
+    ]);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal((await getPaymentRow(freshId))?.utr, utr);
+  });
+
+  test('reusing a UTR after a UTR_NOT_FOUND rejection returns 409 UTR_BLOCKED', async () => {
+    const utr = '109876543212';
+    const { paymentId } = await seedSubmittedPayment([20], utr);
+    const rejected = await reject(laToken, paymentId, { reasonCode: 'UTR_NOT_FOUND' });
+    assert.equal(rejected.statusCode, 200);
+
+    await seedFine(studentId, 30);
+    const intent = await createIntent(studentToken);
+    assert.equal(intent.statusCode, 200);
+    const freshId = intent.json().payment.id as string;
+
+    const response = await submit(studentToken, freshId, [
+      { name: 'utr', value: utr },
+      proofPart(),
+    ]);
+
+    assert.equal(response.statusCode, 409);
+    assert.equal(response.json().code, 'UTR_BLOCKED');
+    assert.equal((await getPaymentRow(freshId))?.status, 'PENDING');
+  });
+});
+
+describe('GET /payments/:id/proof (S1)', () => {
+  function getProof(token: string, paymentId: string) {
+    return app.inject({
+      method: 'GET',
+      url: `/payments/${paymentId}/proof`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+  }
+
+  test('owner can fetch their proof as image/webp', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await getProof(studentToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'] ?? '', /image\/webp/);
+    assert.equal(response.headers['cache-control'], 'private, no-store');
+    assert.ok(response.rawBody.length > 0);
+  });
+
+  test('another student gets 403', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await getProof(otherStudentToken, paymentId);
+
+    assert.equal(response.statusCode, 403);
+  });
+
+  test('LA can fetch a student proof', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await getProof(laToken, paymentId);
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'] ?? '', /image\/webp/);
+  });
+
+  test('the old public path /api/uploads/payments/<file> is no longer served', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+    const stored = await getPaymentRow(paymentId);
+    assert.ok(stored?.proofFileName);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/uploads/payments/${stored.proofFileName}`,
+    });
+
+    assert.equal(response.statusCode, 404);
+  });
+
+  test('unauthenticated request is rejected', async () => {
+    const { paymentId } = await seedSubmittedPayment([20]);
+
+    const response = await app.inject({ method: 'GET', url: `/payments/${paymentId}/proof` });
+
+    assert.equal(response.statusCode, 401);
   });
 });

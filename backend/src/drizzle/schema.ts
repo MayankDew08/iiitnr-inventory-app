@@ -338,7 +338,7 @@ export const payment = pgTable(
     amount: integer().notNull(),
     status: paymentStatus().default('PENDING').notNull(),
     utr: text(),
-    proofImageUrl: text(),
+    proofFileName: text(),
     createdAt: timestamp({ precision: 3, mode: 'string' })
       .default(sql`CURRENT_TIMESTAMP`)
       .notNull(),
@@ -352,6 +352,12 @@ export const payment = pgTable(
   (table) => [
     index('Payment_userId_idx').using('btree', table.userId.asc().nullsLast().op('text_ops')),
     index('Payment_status_idx').using('btree', table.status.asc().nullsLast()),
+    uniqueIndex('Payment_one_active_per_user')
+      .using('btree', table.userId.asc().nullsLast().op('text_ops'))
+      .where(sql`status IN ('PENDING','SUBMITTED')`),
+    uniqueIndex('Payment_utr_active_key')
+      .using('btree', table.utr.asc().nullsLast().op('text_ops'))
+      .where(sql`status IN ('SUBMITTED','VERIFIED')`),
     foreignKey({
       columns: [table.userId],
       foreignColumns: [user.id],

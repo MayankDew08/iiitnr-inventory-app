@@ -1,6 +1,5 @@
 package com.iiitnr.inventoryapp.ui.screens.admin.payment
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,18 +35,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import coil3.compose.SubcomposeAsyncImage
 import com.iiitnr.inventoryapp.data.models.PaymentDetail
 import com.iiitnr.inventoryapp.data.models.PaymentDetailAllocation
 import com.iiitnr.inventoryapp.data.models.PaymentRejectionReason
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.InventoryTable
+import com.iiitnr.inventoryapp.ui.components.common.ProofThumbnail
 import com.iiitnr.inventoryapp.ui.components.common.TableColumn
 import com.iiitnr.inventoryapp.utils.formatDisplayDate
 import org.koin.compose.viewmodel.koinViewModel
@@ -60,6 +57,7 @@ fun PaymentVerificationDetailScreen(
     viewModel: PaymentVerificationDetailViewModel =
         koinViewModel { parametersOf(paymentId) },
 ) {
+    val authToken by viewModel.token.collectAsState(initial = null)
     Scaffold(
         topBar = {
             AppTopBar(
@@ -80,6 +78,7 @@ fun PaymentVerificationDetailScreen(
                 is PaymentVerificationDetailUiState.Loaded ->
                     LoadedContent(
                         detail = state.detail,
+                        authToken = authToken,
                         actionError = viewModel.actionError,
                         selectedReason = viewModel.selectedReason,
                         notes = viewModel.notes,
@@ -166,6 +165,7 @@ private fun ErrorContent(
 @Composable
 private fun LoadedContent(
     detail: PaymentDetail,
+    authToken: String?,
     actionError: String?,
     selectedReason: PaymentRejectionReason?,
     notes: String,
@@ -182,7 +182,7 @@ private fun LoadedContent(
     ) {
         PaymentSummaryCard(detail = detail)
         Text("Payment proof", style = MaterialTheme.typography.titleSmall)
-        ProofImage(detail.payment.proofImageUrl)
+        ProofImage(detail.payment.proofImageUrl, authToken)
         AllocatedFines(allocations = detail.allocations)
         if (actionError != null) {
             Text(
@@ -318,14 +318,10 @@ private fun DetailRow(
 }
 
 @Composable
-private fun ProofImage(url: String?) {
-    var enlargedUrl by remember { mutableStateOf<String?>(null) }
-
-    val enlarged = enlargedUrl
-    if (enlarged != null) {
-        EnlargedProof(url = enlarged, onDismiss = { enlargedUrl = null })
-    }
-
+private fun ProofImage(
+    url: String?,
+    authToken: String?,
+) {
     if (url.isNullOrBlank()) {
         Surface(
             modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(8.dp)),
@@ -341,52 +337,5 @@ private fun ProofImage(url: String?) {
         return
     }
 
-    val sanitizedUrl = url.replace("http://", "https://")
-    SubcomposeAsyncImage(
-        model = sanitizedUrl,
-        contentDescription = "Payment proof",
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .height(220.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { enlargedUrl = sanitizedUrl },
-        contentScale = ContentScale.Crop,
-        loading = { ProofLoading() },
-        error = { ProofError() },
-    )
-}
-
-@Composable
-private fun EnlargedProof(
-    url: String,
-    onDismiss: () -> Unit,
-) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-    ) {
-        SubcomposeAsyncImage(
-            model = url,
-            contentDescription = "Payment proof (enlarged)",
-            modifier = Modifier.fillMaxSize().clickable(onClick = onDismiss),
-            contentScale = ContentScale.Fit,
-            loading = { ProofLoading() },
-            error = { ProofError() },
-        )
-    }
-}
-
-@Composable
-private fun ProofLoading() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun ProofError() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("Could not load proof")
-    }
+    ProofThumbnail(url = url, token = authToken, thumbnailHeight = 220.dp)
 }

@@ -1,25 +1,29 @@
 import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify';
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve as pathResolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { requireAdminOrLA, requireAuth } from '../middleware/auth.js';
+import { isAdminOrLA, requireAdminOrLA, requireAuth } from '../middleware/auth.js';
 import {
   createPaymentIntent,
+  getPaymentById,
   getPaymentConfig,
   getPaymentForAdmin,
   listMyPayments,
   listPendingForAdmin,
   rejectPayment,
   submitPayment,
+  toPaymentDto,
   verifyPayment,
 } from '../services/PaymentService.js';
 import { paymentRejectionReasonValues } from '../utils/enums.js';
 import type { PaymentRejectionReasonValue } from '../utils/enums.js';
 import { UnauthorizedError } from '../utils/errors.js';
 
-const UPLOADS_DIR = join(process.cwd(), 'uploads', 'payments');
-const UPLOADS_DIR_RESOLVED = pathResolve(UPLOADS_DIR);
+// Proofs live under private-uploads/ (not the publicly served uploads/) and
+// are only ever returned by the authenticated GET /:id/proof route.
+const PROOFS_DIR = join(process.cwd(), 'private-uploads', 'payments');
+const PROOFS_DIR_RESOLVED = pathResolve(PROOFS_DIR);
 
 const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -63,9 +67,9 @@ function detectImageType(bytes: Buffer): string | null {
   return MAGIC_SIGNATURES.find((signature) => signature.match(bytes))?.type ?? null;
 }
 
-function ensureUploadsDir() {
-  if (!existsSync(UPLOADS_DIR)) {
-    mkdirSync(UPLOADS_DIR, { recursive: true });
+function ensureProofsDir() {
+  if (!existsSync(PROOFS_DIR)) {
+    mkdirSync(PROOFS_DIR, { recursive: true });
   }
 }
 
@@ -76,14 +80,10 @@ function normalizeUploadPath(base: string, rawName: string): string | null {
 }
 
 /**
- * Stored as a path, not an absolute URL: the host in the request is whatever
- * address the client happened to use (LAN IP, localhost, a hosted domain), so
- * an absolute URL breaks for every other client. Clients prefix their own server.
+ * Stored as a bare file name only; the API maps it to `proofImageUrl`
+ * (`/api/payments/{id}/proof`) via toPaymentDto, so the raw disk layout is
+ * never part of the wire format.
  */
-function proofPublicPath(filename: string): string {
-  return `/api/uploads/payments/${filename}`;
-}
-
 function deleteUploadedFile(target: string): void {
   try {
     unlinkSync(target);
@@ -157,6 +157,14 @@ async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
     return reply.code(400).send({ error: 'utr_required' });
   }
 
+  // Cheap checks first: a UTR is exactly 12 digits once spaces are removed.
+  // This runs before the image work so a malformed UTR never pays for a
+  // resize/re-encode.
+  const normalizedUtr = trimmedUtr.replace(/\s+/g, '');
+  if (!/^\d{12}$/.test(normalizedUtr)) {
+    return reply.code(400).send({ error: 'invalid_utr', code: 'INVALID_UTR' });
+  }
+
   if (uploadError) {
     return reply.code(uploadError.statusCode).send({ error: uploadError.message });
   }
@@ -185,9 +193,9 @@ async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
     return reply.code(400).send({ error: 'invalid or corrupted image data' });
   }
 
-  ensureUploadsDir();
+  ensureProofsDir();
   const filename = `${randomUUID()}.webp`;
-  const safeTarget = normalizeUploadPath(UPLOADS_DIR_RESOLVED, filename);
+  const safeTarget = normalizeUploadPath(PROOFS_DIR_RESOLVED, filename);
   if (!safeTarget) {
     return reply.code(400).send({ error: 'invalid upload path' });
   }
@@ -195,12 +203,46 @@ async function handleSubmit(req: FastifyRequest, reply: FastifyReply) {
   await writeFile(safeTarget, processedBuffer);
 
   try {
-    const updated = await submitPayment(id, userId, trimmedUtr, proofPublicPath(filename));
-    return reply.send({ payment: updated });
+    const updated = await submitPayment(id, userId, normalizedUtr, filename);
+    return reply.send({ payment: toPaymentDto(updated) });
   } catch (err) {
     // The payment was not written, so do not leave an orphan proof behind.
     deleteUploadedFile(safeTarget);
     throw err;
+  }
+}
+
+async function handleProof(req: FastifyRequest, reply: FastifyReply) {
+  const { id } = req.params as { id?: string };
+  if (!id) {
+    return reply.code(404).send({ error: 'payment not found' });
+  }
+  const record = await getPaymentById(id);
+  if (!record) {
+    return reply.code(404).send({ error: 'payment not found' });
+  }
+  const sub = (req.user as { sub?: string } | undefined)?.sub;
+  const role = (req.user as { role?: string } | undefined)?.role as
+    import('../utils/enums.js').UserRoleValue | undefined;
+  if (record.userId !== sub && !isAdminOrLA(role)) {
+    return reply.code(403).send({ error: 'forbidden' });
+  }
+  if (!record.proofFileName) {
+    return reply.code(404).send({ error: 'proof not found' });
+  }
+  const target = normalizeUploadPath(PROOFS_DIR_RESOLVED, record.proofFileName);
+  if (!target) {
+    return reply.code(404).send({ error: 'proof not found' });
+  }
+  try {
+    const bytes = await readFile(target);
+    return reply
+      .code(200)
+      .header('content-type', 'image/webp')
+      .header('cache-control', 'private, no-store')
+      .send(bytes);
+  } catch {
+    return reply.code(404).send({ error: 'proof not found' });
   }
 }
 
@@ -217,7 +259,7 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
       return reply.code(400).send({ error: 'payment id is required' });
     }
     const detail = await getPaymentForAdmin(id);
-    return reply.send(detail);
+    return reply.send({ ...detail, payment: toPaymentDto(detail.payment) });
   });
 
   app.post('/admin/:id/verify', { preHandler: requireAdminOrLA }, async (req, reply) => {
@@ -226,7 +268,7 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
       return reply.code(400).send({ error: 'payment id is required' });
     }
     const updated = await verifyPayment(id, getCurrentUserId(req));
-    return reply.send({ payment: updated });
+    return reply.send({ payment: toPaymentDto(updated) });
   });
 
   app.post('/admin/:id/reject', { preHandler: requireAdminOrLA }, async (req, reply) => {
@@ -261,7 +303,7 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
       reasonCode as PaymentRejectionReasonValue,
       notes,
     );
-    return reply.send({ payment: updated });
+    return reply.send({ payment: toPaymentDto(updated) });
   });
 
   app.post('/', { preHandler: requireAuth }, async (req, reply) => {
@@ -269,7 +311,7 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
     const { upiVpa, payeeName } = getPaymentConfig();
 
     return reply.send({
-      payment: created,
+      payment: toPaymentDto(created),
       upi: {
         upiVpa,
         payeeName,
@@ -282,14 +324,14 @@ const paymentsRoutes: FastifyPluginCallback = (app, _opts, done) => {
     });
   });
 
-  app.get('/config', { preHandler: requireAuth }, (_req, reply) =>
-    reply.send(getPaymentConfig()),
-  );
+  app.get('/config', { preHandler: requireAuth }, (_req, reply) => reply.send(getPaymentConfig()));
 
   app.get('/mine', { preHandler: requireAuth }, async (req, reply) => {
     const payments = await listMyPayments(getCurrentUserId(req));
-    return reply.send({ payments });
+    return reply.send({ payments: payments.map(toPaymentDto) });
   });
+
+  app.get('/:id/proof', { preHandler: requireAuth }, (req, reply) => handleProof(req, reply));
 
   app.post('/:id/submit', { preHandler: requireAuth }, (req, reply) => handleSubmit(req, reply));
 

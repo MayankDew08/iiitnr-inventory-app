@@ -6,6 +6,7 @@ import com.iiitnr.inventoryapp.data.models.CreatePaymentResponse
 import com.iiitnr.inventoryapp.data.models.MyPaymentsResponse
 import com.iiitnr.inventoryapp.data.models.Payment
 import com.iiitnr.inventoryapp.data.models.PaymentConfig
+import com.iiitnr.inventoryapp.data.models.PaymentErrorCodes
 import com.iiitnr.inventoryapp.data.models.PaymentStatus
 import com.iiitnr.inventoryapp.data.models.PaymentUpiInfo
 import com.iiitnr.inventoryapp.data.models.SubmitPaymentResponse
@@ -94,7 +95,7 @@ class PaymentViewModelTest {
 
     @Test
     fun creatingIntentToErrorOnNoUnpaidFines() {
-        api.onCreate = { throw AppHttpException(400, "Nothing to pay", "no_unpaid_fines") }
+        api.onCreate = { throw AppHttpException(400, "Nothing to pay", PaymentErrorCodes.NO_UNPAID_FINES) }
 
         viewModel.onPayTapped()
 
@@ -102,9 +103,42 @@ class PaymentViewModelTest {
     }
 
     @Test
+    fun creatingIntentToErrorOnPaymentAwaitingVerification() {
+        api.onCreate = {
+            throw AppHttpException(409, "Already submitted", PaymentErrorCodes.PAYMENT_AWAITING_VERIFICATION)
+        }
+
+        viewModel.onPayTapped()
+
+        assertEquals(
+            "Your payment is awaiting verification",
+            (viewModel.uiState as PaymentUiState.Error).message,
+        )
+    }
+
+    @Test
     fun enteringUtrBlocksSubmitWhenUtrIsBlank() {
         enterUtr()
         viewModel.onUtrChanged("   ")
+
+        assertFalse(viewModel.canSubmit)
+    }
+
+    @Test
+    fun utrInputKeepsOnlyDigitsUpToTwelve() {
+        enterUtr()
+        viewModel.onUtrChanged("12ab34 5678901234")
+
+        val state = assertIs<PaymentUiState.EnteringUtr>(viewModel.uiState)
+        assertEquals("123456789012", state.utr)
+    }
+
+    @Test
+    fun elevenDigitUtrBlocksSubmit() {
+        enterUtr()
+        viewModel.onUtrChanged("12345678901")
+        picker.image = ImageResult(ByteArray(16), "proof.jpg")
+        viewModel.onPickProof()
 
         assertFalse(viewModel.canSubmit)
     }
@@ -129,11 +163,44 @@ class PaymentViewModelTest {
     @Test
     fun submittingToSubmittedOnConflictRecovery() {
         enterUtrWithProofAndUtr()
-        api.onSubmit = { throw AppHttpException(409, "Already submitted", "payment_not_pending") }
+        api.onSubmit = { throw AppHttpException(409, "Already submitted", "PAYMENT_NOT_PENDING") }
 
         viewModel.onSubmitTapped()
 
         assertIs<PaymentUiState.Submitted>(viewModel.uiState)
+    }
+
+    @Test
+    fun submittingToEnteringUtrWithErrorOnInvalidUtr() {
+        enterUtrWithProofAndUtr()
+        api.onSubmit = { throw AppHttpException(400, "invalid_utr", PaymentErrorCodes.INVALID_UTR) }
+
+        viewModel.onSubmitTapped()
+
+        val state = assertIs<PaymentUiState.EnteringUtr>(viewModel.uiState)
+        assertEquals("Enter the 12-digit UTR from your payment receipt", state.submitError)
+    }
+
+    @Test
+    fun submittingToEnteringUtrWithErrorOnUtrAlreadyUsed() {
+        enterUtrWithProofAndUtr()
+        api.onSubmit = { throw AppHttpException(409, "utr_already_used", PaymentErrorCodes.UTR_ALREADY_USED) }
+
+        viewModel.onSubmitTapped()
+
+        val state = assertIs<PaymentUiState.EnteringUtr>(viewModel.uiState)
+        assertEquals("This UTR has already been used for another payment", state.submitError)
+    }
+
+    @Test
+    fun submittingToEnteringUtrWithErrorOnUtrBlocked() {
+        enterUtrWithProofAndUtr()
+        api.onSubmit = { throw AppHttpException(409, "utr_blocked", PaymentErrorCodes.UTR_BLOCKED) }
+
+        viewModel.onSubmitTapped()
+
+        val state = assertIs<PaymentUiState.EnteringUtr>(viewModel.uiState)
+        assertEquals("This UTR cannot be used again", state.submitError)
     }
 
     @Test

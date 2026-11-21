@@ -32,6 +32,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +47,7 @@ import com.iiitnr.inventoryapp.data.models.Payment
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
+import com.iiitnr.inventoryapp.ui.components.common.ProofThumbnail
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
@@ -67,6 +69,7 @@ fun FinesScreen(
     viewModel: FinesViewModel = koinViewModel(),
 ) {
     var selectedRequest by remember { mutableStateOf<Request?>(null) }
+    val authToken by viewModel.token.collectAsState(initial = null)
     val today = currentToday
 
     ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
@@ -88,6 +91,7 @@ fun FinesScreen(
             FinesBody(
                 modifier = Modifier.fillMaxSize().padding(paddingValues),
                 viewModel = viewModel,
+                authToken = authToken,
                 today = today,
                 isExpanded = isExpanded,
                 selectedRequest = selectedRequest,
@@ -111,6 +115,7 @@ fun FinesScreen(
 @Composable
 private fun FinesBody(
     viewModel: FinesViewModel,
+    authToken: String?,
     today: LocalDate,
     isExpanded: Boolean,
     selectedRequest: Request?,
@@ -160,6 +165,7 @@ private fun FinesBody(
                         fines = viewModel.fines,
                         accruingFines = viewModel.accruingFines,
                         payments = viewModel.payments,
+                        authToken = authToken,
                         total = viewModel.totalOwed,
                         today = today,
                         onCardClick = onSelect,
@@ -187,6 +193,7 @@ private fun FinesContent(
     fines: List<Request>,
     accruingFines: List<Request>,
     payments: List<Payment>,
+    authToken: String?,
     total: Int,
     today: LocalDate,
     onCardClick: (Request) -> Unit,
@@ -229,6 +236,13 @@ private fun FinesContent(
                     title = "₹${payment.amount}",
                     detail = "Submitted ${timeAgo(payment.submittedAt)}",
                 )
+                payment.proofImageUrl?.let { proofUrl ->
+                    ProofThumbnail(
+                        url = proofUrl,
+                        token = authToken,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
+                }
             }
         }
 

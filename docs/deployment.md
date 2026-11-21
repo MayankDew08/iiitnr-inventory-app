@@ -63,6 +63,24 @@ Caddy reads its certificates from `backend/certs/` (gitignored). Caddy's own
 `Caddyfile` handles the `inventory.iiitnr.ac.in` domain and serves
 `/srv/web` for static assets.
 
+## File storage
+
+User-uploaded files live on a **persistent volume**, the same way `uploads/`
+(component images) does:
+
+- `uploads/` — publicly served component images.
+- `private-uploads/payments/` — payment proof screenshots. The public file
+  server does **not** serve this folder; proofs are only returned by the
+  authenticated `GET /api/payments/:id/proof` route (owner, LA or admin), so
+  no public URL ever exposes them.
+
+Both folders must be on persistent storage in the deployment (a mounted
+volume, like `./uploads:/app/uploads` in `compose.prod.yaml`). Add the same
+mount for `./private-uploads:/app/private-uploads` so proofs survive
+container recreates. Existing proofs in `uploads/payments/` are moved once
+with `bun run scripts/move-payment-proofs.ts` (after migration 0019), then
+the old files are deleted by hand.
+
 ## Releases
 
 ```bash

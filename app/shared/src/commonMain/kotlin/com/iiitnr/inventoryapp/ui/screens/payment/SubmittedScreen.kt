@@ -17,12 +17,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Payment
+import com.iiitnr.inventoryapp.ui.components.common.ProofThumbnail
 
 @Composable
 fun SubmittedScreen(
     payment: Payment,
     onBackToFines: () -> Unit,
     modifier: Modifier = Modifier,
+    authToken: String? = null,
 ) {
     Column(
         modifier = modifier.fillMaxWidth().padding(24.dp),
@@ -50,6 +52,10 @@ fun SubmittedScreen(
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
         )
+        payment.proofImageUrl?.let { proofUrl ->
+            Spacer(Modifier.height(16.dp))
+            ProofThumbnail(url = proofUrl, token = authToken)
+        }
         Spacer(Modifier.height(24.dp))
         Button(onClick = onBackToFines, modifier = Modifier.fillMaxWidth()) {
             Text("Back to Fines")
