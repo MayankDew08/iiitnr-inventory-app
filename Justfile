@@ -209,7 +209,7 @@ deploy:
     @if [ -z "${GOOGLE_WEB_CLIENT_ID:-}" ]; then \
       echo "ERROR: GOOGLE_WEB_CLIENT_ID not set (check backend/.env)"; exit 1; fi
     podman tag localhost/backend_backend:latest localhost/backend_backend:previous
-    podman compose -f {{backend}}/compose.prod.yaml up -d --build --force-recreate --remove-orphans backend
+    podman compose -f {{backend}}/compose.prod.yaml up -d --build --force-recreate --remove-orphans backend caddy
     just deploy-web
     @just verify
 

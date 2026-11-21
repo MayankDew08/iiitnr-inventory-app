@@ -13,7 +13,8 @@ inventory.iiitnr.ac.in {
         reverse_proxy backend:4000
     }
 
-    handle /download/* {
+    @download path /download /download/*
+    handle @download {
         reverse_proxy backend:4000
     }
 
