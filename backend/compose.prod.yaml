@@ -50,6 +50,7 @@ services:
     cpus: 1.0
     volumes:
       - ./uploads:/app/uploads
+      - ./private-uploads:/app/private-uploads
     networks:
       - app
 

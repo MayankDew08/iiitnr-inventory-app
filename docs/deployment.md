@@ -37,6 +37,7 @@ matter in production are listed in `backend/.env.example`; at minimum:
 | `SMTP_*` | Optional — only needed for the expiry / late-fee emails, see [troubleshooting](troubleshooting.md#email) |
 | `MAIL_ENABLED` | Set to `true` to actually send. Until then the mail sweeps only log what they would send |
 | `ALLOWED_ORIGINS` | CORS allow-list for the web client |
+| `UPI_VPA` + `UPI_PAYEE_NAME` | Institute UPI VPA and payee name handed to the app for fine payments — required at boot |
 
 ## Deploying
 
@@ -61,6 +62,34 @@ automatically on container start (`bun run migrate`).
 Caddy reads its certificates from `backend/certs/` (gitignored). Caddy's own
 `Caddyfile` handles the `inventory.iiitnr.ac.in` domain and serves
 `/srv/web` for static assets.
+
+## File storage
+
+User-uploaded files live on a **persistent volume**, the same way `uploads/`
+(component images) does:
+
+- `uploads/` — publicly served component images.
+- `private-uploads/payments/` — payment proof screenshots. The public file
+  server does **not** serve this folder; proofs are only returned by the
+  authenticated `GET /payments/:id/proof` route (owner, LA or admin, reached
+  as `/api/payments/:id/proof` through Caddy in production), so
+  no public URL ever exposes them.
+
+Both folders must be on persistent storage in the deployment; `compose.prod.yaml`
+mounts `./uploads:/app/uploads` and `./private-uploads:/app/private-uploads`.
+The container runs as uid `65532`, so create both host directories up front and
+hand them to that uid — otherwise the mkdir at boot and the proof upload fail:
+
+```bash
+mkdir -p uploads private-uploads/payments
+sudo chown -R 65532:65532 uploads private-uploads
+```
+
+The entrypoint probes `private-uploads/` at boot and refuses to start when it is
+not writable, so a mis-owned mount fails at deploy time rather than after a
+student has paid. Proofs written before the move to `private-uploads/` (rows holding a path
+instead of a bare file name) are repaired once with
+`bun run scripts/move-payment-proofs.ts`, then the old files are deleted by hand.
 
 ## Releases
 
