@@ -5,6 +5,8 @@ import { RequestStatus, UserRole } from '../utils/enums.js';
 import type { RequestStatusValue } from '../utils/enums.js';
 import { notifyRequestsUpdated } from '../utils/events.js';
 import { consumeOtp } from './otpStore.js';
+import { computeLateFee } from './fine-policy.js';
+import { istDaysBetween } from './date-utils.js';
 import {
   ExcessReturnQuantityError,
   InsufficientQuantityError,
@@ -439,12 +441,27 @@ export async function returnRequestTransaction(
     // still missed. The stock movement above is what actually matters.
     const statusToSet = options.preserveStatus ? lockedRequest.status : newStatus;
 
+    const isFullyReturned = newStatus === RequestStatus.RETURNED;
+
+    // Recompute from the ACTUAL return time — never trust the swept value.
+    const daysOverdue = lockedRequest.returnDueAt
+      ? istDaysBetween(new Date(lockedRequest.returnDueAt), new Date(returnedAt))
+      : 0;
+    // On a full return, freeze the final fee. On a partial return, leave the
+    // amount to the hourly sweep (the request is still out).
+    const finalFine = isFullyReturned ? computeLateFee(daysOverdue) : lockedRequest.lateFeeAccrued;
+
     await tx
       .update(request)
       .set({
         status: statusToSet,
         updatedAt: returnedAt,
-        returnedAt: newStatus === RequestStatus.RETURNED ? returnedAt : null,
+        returnedAt: isFullyReturned ? returnedAt : null,
+        lateFeeAccrued: finalFine,
+        // Stamp the freeze ONLY when there is actually a fee. Its presence
+        // means "a finalized, unpaid bill lives here."
+        fineFinalizedAt:
+          isFullyReturned && finalFine > 0 ? returnedAt : lockedRequest.fineFinalizedAt,
       })
       .where(eq(request.id, existingRequest.id));
   });

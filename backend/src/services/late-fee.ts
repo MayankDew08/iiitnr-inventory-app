@@ -5,13 +5,8 @@ import { RequestStatus } from '../utils/enums.js';
 import { istDaysBetween } from './date-utils.js';
 import { RequestEmailKind, sendTrackedEmail } from './email-service.js';
 import { isMailEnabled } from './MailService.js';
-import {
-  buildEmailContext,
-  lateFeeEmail,
-  LATE_FEE_CAP_DAYS,
-  LATE_FEE_LADDER,
-  LATE_FEE_PER_DAY,
-} from './email-templates.js';
+import { buildEmailContext, lateFeeEmail, LATE_FEE_LADDER } from './email-templates.js';
+import { computeLateFee } from './fine-policy.js';
 import { fetchExactAndShapeRequest } from './RequestService.js';
 import { HOURLY_SWEEP_INTERVAL_MS, startIntervalSweep } from '../utils/sweep.js';
 
@@ -22,11 +17,6 @@ export interface LateFeeCandidate {
   daysOverdue: number;
   feeAccrued: number;
   variant: string;
-}
-
-export function computeLateFee(daysOverdue: number): number {
-  if (daysOverdue <= 0) return 0;
-  return Math.min(daysOverdue, LATE_FEE_CAP_DAYS) * LATE_FEE_PER_DAY;
 }
 
 /**

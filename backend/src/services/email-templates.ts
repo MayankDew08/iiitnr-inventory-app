@@ -1,9 +1,5 @@
 import { formatIstDate } from './date-utils.js';
-
-export const LATE_FEE_PER_DAY = 1;
-
-export const LATE_FEE_CAP_DAYS = 4 * 365;
-export const LATE_FEE_CAP = LATE_FEE_PER_DAY * LATE_FEE_CAP_DAYS;
+import { LATE_FEE_PER_DAY, LATE_FEE_CAP } from './fine-policy.js';
 
 export const LATE_FEE_LADDER = [
   { day: 1, variant: 'D1' },

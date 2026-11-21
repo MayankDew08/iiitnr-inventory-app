@@ -9,6 +9,8 @@ import { db } from '../src/drizzle/db.js';
 import { component, request } from '../src/drizzle/schema.js';
 import * as RequestService from '../src/services/RequestService.js';
 import { expireOverdueRequests } from '../src/services/request-expiry.js';
+import { syncAccruedFees } from '../src/services/late-fee.js';
+import { IST_DAY_MS, istDayStart } from '../src/services/date-utils.js';
 import {
   createComponent,
   createRequest,
@@ -2442,5 +2444,223 @@ describe('Expired partial return via API', () => {
     const comp = await findComponentById(item.id);
     assert.equal(comp?.availableQuantity, 8);
     assert.equal(comp?.totalQuantity, 8);
+  });
+});
+
+describe('Fine finalization on return', () => {
+  // Noon-anchored so the IST calendar-day math in computeLateFee/istDaysBetween
+  // can't drift with wall-clock time; a negative offset lands in the future.
+  function daysAgoIso(days: number): string {
+    return new Date(
+      istDayStart(new Date()).getTime() - days * IST_DAY_MS + 12 * 60 * 60 * 1000,
+    ).toISOString();
+  }
+
+  test('on-time full return accrues no fee and does not stamp fineFinalizedAt', async () => {
+    const item = await createComponent({
+      name: 'On Time Return Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'On Time Return',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 4, fulfilledQuantity: 4 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(-1) }) // due tomorrow
+      .where(eq(request.id, req.id));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { status: 'RETURNED' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const updatedReq = await findRequestById(req.id);
+    assert.ok(updatedReq?.returnedAt);
+    assert.equal(updatedReq?.lateFeeAccrued, 0);
+    assert.equal(updatedReq?.fineFinalizedAt, null);
+  });
+
+  test('late full return freezes the correct fee and stamps fineFinalizedAt', async () => {
+    const item = await createComponent({
+      name: 'Late Return Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Late Return',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 4, fulfilledQuantity: 4 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(5) })
+      .where(eq(request.id, req.id));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { status: 'RETURNED' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const updatedReq = await findRequestById(req.id);
+    assert.ok(updatedReq?.returnedAt);
+    assert.equal(updatedReq?.lateFeeAccrued, 5);
+    assert.ok(updatedReq?.fineFinalizedAt);
+  });
+
+  test('recompute on return overwrites a stale swept lateFeeAccrued value', async () => {
+    const item = await createComponent({
+      name: 'Stale Fee Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Stale Fee Return',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 4, fulfilledQuantity: 4 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(3), lateFeeAccrued: 999 })
+      .where(eq(request.id, req.id));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { status: 'RETURNED' },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const updatedReq = await findRequestById(req.id);
+    assert.equal(updatedReq?.lateFeeAccrued, 3);
+  });
+
+  test('partial return does not finalize the fine', async () => {
+    const item = await createComponent({
+      name: 'Partial Fine Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Partial Return Fine',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 2, fulfilledQuantity: 2 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(4), lateFeeAccrued: 4 })
+      .where(eq(request.id, req.id));
+
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: {
+        status: 'RETURNED',
+        returnItems: [{ componentId: item.id, quantity: 1 }],
+      },
+    });
+
+    assert.equal(response.statusCode, 200);
+    const updatedReq = await findRequestById(req.id);
+    assert.equal(updatedReq?.returnedAt, null);
+    assert.equal(updatedReq?.fineFinalizedAt, null);
+    assert.equal(updatedReq?.lateFeeAccrued, 4);
+  });
+
+  test('a finalized fine survives the hourly sweep', async () => {
+    const item = await createComponent({
+      name: 'Sweep Survives Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Sweep Survives',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 4, fulfilledQuantity: 4 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(6) })
+      .where(eq(request.id, req.id));
+
+    await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { status: 'RETURNED' },
+    });
+
+    const beforeSweep = await findRequestById(req.id);
+    assert.equal(beforeSweep?.lateFeeAccrued, 6);
+    assert.ok(beforeSweep?.fineFinalizedAt);
+
+    await syncAccruedFees();
+
+    const afterSweep = await findRequestById(req.id);
+    assert.equal(afterSweep?.lateFeeAccrued, beforeSweep?.lateFeeAccrued);
+    assert.equal(afterSweep?.fineFinalizedAt, beforeSweep?.fineFinalizedAt);
+  });
+
+  test('fineSettledAt stays null through finalize and sweep', async () => {
+    const item = await createComponent({
+      name: 'Settled Null Sensor',
+      totalQuantity: 10,
+      availableQuantity: 6,
+    });
+    createdComponentIds.push(item.id);
+
+    const req = await createRequest({
+      userId: studentId,
+      targetFacultyId: facultyId,
+      projectTitle: 'Settled Null',
+      status: 'ISSUED',
+      items: [{ componentId: item.id, quantity: 4, fulfilledQuantity: 4 }],
+    });
+    await db
+      .update(request)
+      .set({ returnDueAt: daysAgoIso(2) })
+      .where(eq(request.id, req.id));
+
+    await app.inject({
+      method: 'PUT',
+      url: `/requests/${req.id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { status: 'RETURNED' },
+    });
+
+    await syncAccruedFees();
+
+    const updatedReq = await findRequestById(req.id);
+    assert.equal(updatedReq?.fineSettledAt, null);
   });
 });
