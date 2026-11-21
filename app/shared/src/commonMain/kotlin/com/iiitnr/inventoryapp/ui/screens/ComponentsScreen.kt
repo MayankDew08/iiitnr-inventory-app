@@ -39,6 +39,7 @@ import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.components.AddComponentFAB
 import com.iiitnr.inventoryapp.ui.components.components.CartDialog
@@ -123,7 +124,7 @@ fun ComponentsScreen(
             ComponentsTopBar(
                 onNavigateToHome = onNavigateToProfile,
                 onNavigateToRequests = onNavigateToRequests,
-                maxContentWidth = 1280.dp,
+                maxContentWidth = WideContentWidth,
                 pendingRequestsCount = if (isFaculty) viewModel.pendingRequestsCount else null,
                 showExportCsv = canExportCsv && viewModel.components.isNotEmpty(),
                 onExportCsv = { exportComponentsCsv() },
@@ -281,14 +282,15 @@ private fun ComponentsFabSection(
     onShowCartDialog: () -> Unit,
     onAddComponent: () -> Unit,
 ) {
-    // The Scaffold pins its FAB slot to the window's end, so centre a 1280.dp
-    // column first to keep the FAB on the content grid's right edge.
+    // The Scaffold pins its FAB slot to the window's end, so centre a
+    // WideContentWidth column first to keep the FAB on the content grid's right
+    // edge.
     Box(
         modifier = Modifier.fillMaxWidth(),
         contentAlignment = Alignment.Center,
     ) {
         Box(
-            modifier = Modifier.widthIn(max = 1280.dp).fillMaxWidth(),
+            modifier = Modifier.widthIn(max = WideContentWidth).fillMaxWidth(),
             contentAlignment = Alignment.BottomEnd,
         ) {
             when {
@@ -380,7 +382,7 @@ private fun ComponentsHeader(
         Column(
             modifier =
                 Modifier
-                    .widthIn(max = 1280.dp)
+                    .widthIn(max = WideContentWidth)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),

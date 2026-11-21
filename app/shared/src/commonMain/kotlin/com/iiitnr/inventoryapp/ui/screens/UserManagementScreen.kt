@@ -52,6 +52,7 @@ import com.iiitnr.inventoryapp.data.models.UpdateUserRequest
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.PaginationBar
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
@@ -103,7 +104,7 @@ fun UserManagementScreen(
             AppTopBar(
                 title = "User Management",
                 onNavigateBack = onNavigateBack,
-                maxContentWidth = 1000.dp,
+                maxContentWidth = NarrowContentWidth,
             )
         },
     ) { paddingValues ->
@@ -152,7 +153,7 @@ fun UserManagementScreen(
                         contentAlignment = Alignment.TopCenter,
                     ) {
                         LazyColumn(
-                            modifier = Modifier.widthIn(max = 1000.dp).fillMaxSize(),
+                            modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize(),
                             contentPadding =
                                 PaddingValues(
                                     start = 12.dp,
@@ -177,7 +178,7 @@ fun UserManagementScreen(
                         totalCount = totalCount,
                         onPrevious = { viewModel.onPreviousPage() },
                         onNext = { viewModel.onNextPage() },
-                        maxContentWidth = 1000.dp,
+                        maxContentWidth = NarrowContentWidth,
                     )
                 }
             }
@@ -223,7 +224,7 @@ private fun UserManagementHeader(
         Column(
             modifier =
                 Modifier
-                    .widthIn(max = 1000.dp)
+                    .widthIn(max = NarrowContentWidth)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -310,7 +311,7 @@ private fun UserCard(
                 Spacer(Modifier.width(8.dp))
                 Surface(
                     shape = RoundedCornerShape(6.dp),
-                    color = roleColor.copy(alpha = 0.12f),
+                    color = roleColor.copy(alpha = if (isDark) 0.24f else 0.14f),
                 ) {
                     Text(
                         text = user.role.name,

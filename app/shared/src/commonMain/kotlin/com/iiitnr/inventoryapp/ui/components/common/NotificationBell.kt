@@ -23,7 +23,7 @@ fun NotificationBell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    IconButton(onClick = onClick, modifier = modifier) {
+    IconButton(onClick = onClick, modifier = modifier.handCursor()) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
                 imageVector = Icons.Outlined.Notifications,

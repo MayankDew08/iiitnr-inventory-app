@@ -26,6 +26,18 @@ enum class ScreenWidthClass {
     Expanded,
 }
 
+/**
+ * Width cap for grids and Master–Detail layouts: the Components grid and the
+ * two-pane Requests / Fines / Fines-admin / Audit Log screens.
+ */
+val WideContentWidth = 1280.dp
+
+/**
+ * Width cap for single-column screens and the `AppTopBar` of focused screens:
+ * lists, notifications, user management, profile and auth forms.
+ */
+val NarrowContentWidth = 900.dp
+
 /** Resolves the current [ScreenWidthClass] from the constraints of this scope. */
 @Composable
 fun BoxWithConstraintsScope.screenWidthClass(): ScreenWidthClass =

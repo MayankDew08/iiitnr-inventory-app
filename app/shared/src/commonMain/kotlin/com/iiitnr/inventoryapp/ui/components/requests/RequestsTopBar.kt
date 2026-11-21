@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.NotificationBell
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 
 @Composable
 fun RequestsTopBar(
@@ -29,7 +30,7 @@ fun RequestsTopBar(
         maxContentWidth = maxContentWidth,
         actions = {
             if (showExportCsv && onExportCsv != null) {
-                IconButton(onClick = onExportCsv) {
+                IconButton(onClick = onExportCsv, modifier = Modifier.handCursor()) {
                     Icon(
                         imageVector = Icons.Outlined.FileDownload,
                         contentDescription = "Export requests to CSV",
@@ -43,7 +44,7 @@ fun RequestsTopBar(
                 )
             }
             if (onScanRequestClick != null) {
-                IconButton(onClick = onScanRequestClick) {
+                IconButton(onClick = onScanRequestClick, modifier = Modifier.handCursor()) {
                     Icon(
                         imageVector = Icons.Default.QrCodeScanner,
                         contentDescription = "Scan request QR or enter request ID",

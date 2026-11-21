@@ -43,8 +43,10 @@ import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.RequestCardHeader
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
@@ -65,14 +67,13 @@ fun FinesScreen(
 
     ResponsiveContent(modifier = Modifier.fillMaxSize()) { widthClass ->
         val isExpanded = widthClass == ScreenWidthClass.Expanded
-        val hasFines = !viewModel.isLoading && viewModel.errorMessage == null && viewModel.fines.isNotEmpty()
 
         Scaffold(
             topBar = {
                 AppTopBar(
                     title = "Fines",
                     onNavigateBack = onNavigateBack,
-                    maxContentWidth = if (isExpanded && hasFines) 1280.dp else 800.dp,
+                    maxContentWidth = if (isExpanded) WideContentWidth else NarrowContentWidth,
                 )
             },
         ) { paddingValues ->
@@ -149,11 +150,11 @@ private fun FinesBody(
     }
 }
 
-/** Centres loading/error/empty states in the narrow 800.dp column. */
+/** Centres loading/error/empty states in the narrow [NarrowContentWidth] column. */
 @Composable
 private fun FinesCenteredState(content: @Composable () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Box(modifier = Modifier.widthIn(max = 800.dp).fillMaxSize()) {
+        Box(modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize()) {
             content()
         }
     }
@@ -167,7 +168,7 @@ private fun FinesContent(
     onCardClick: (Request) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(modifier = Modifier.widthIn(max = 800.dp).fillMaxSize()) {
+        LazyColumn(modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize()) {
             item { FinesOverdueHeading() }
 
             items(fines, key = { it.id }) { request ->
@@ -204,7 +205,7 @@ private fun FinesMasterDetail(
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Row(
-            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            modifier = Modifier.widthIn(max = WideContentWidth).fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(modifier = Modifier.width(440.dp).fillMaxHeight()) {

@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Component
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.platform.VerticalScrollbarOrEmpty
 
 // Keeps the last row clear of the Add / Cart FAB.
@@ -122,7 +123,7 @@ private fun ComponentsGrid(
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 340.dp),
         state = state,
-        modifier = Modifier.widthIn(max = 1280.dp).fillMaxHeight(),
+        modifier = Modifier.widthIn(max = WideContentWidth).fillMaxHeight(),
         contentPadding = ContentPadding,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),

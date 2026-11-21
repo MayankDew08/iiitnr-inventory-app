@@ -147,62 +147,70 @@ fun LoginScreen(
             )
 
             if (BuildFlags.IS_DEBUG) {
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    color = MaterialTheme.colorScheme.outlineVariant,
-                )
-                Text(
-                    text = "Debug: Legacy Login",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(bottom = 8.dp),
-                )
-                OutlinedTextField(
-                    value = viewModel.email,
-                    onValueChange = {
-                        viewModel.email = it
-                        viewModel.errorMessage = null
-                    },
-                    label = { Text("Email") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                    singleLine = true,
-                    enabled = !isLoading,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                    keyboardActions =
-                        KeyboardActions(
-                            onNext = { passwordFocusRequester.requestFocus() },
-                        ),
-                )
-                OutlinedTextField(
-                    value = viewModel.password,
-                    onValueChange = {
-                        viewModel.password = it
-                        viewModel.errorMessage = null
-                    },
-                    label = { Text("Password") },
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp).focusRequester(passwordFocusRequester),
-                    visualTransformation = PasswordVisualTransformation(),
-                    singleLine = true,
-                    enabled = !isLoading,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions =
-                        KeyboardActions(
-                            onDone = { viewModel.login(onLoginSuccess) },
-                        ),
-                )
-                Button(
-                    onClick = { viewModel.login(onLoginSuccess) },
-                    modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth().height(48.dp),
-                    enabled = !isLoading,
-                ) {
-                    Text("Login")
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
-                    onClick = onNavigateToRegister,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Go to Register (Debug)")
+                // Same 400.dp cap as the role cards above, so the debug form does
+                // not stretch wider than the sign-in choices.
+                Column(modifier = Modifier.widthIn(max = 400.dp).fillMaxWidth()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                    Text(
+                        text = "Debug: Legacy Login",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = 8.dp),
+                    )
+                    OutlinedTextField(
+                        value = viewModel.email,
+                        onValueChange = {
+                            viewModel.email = it
+                            viewModel.errorMessage = null
+                        },
+                        label = { Text("Email") },
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        singleLine = true,
+                        enabled = !isLoading,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                        keyboardActions =
+                            KeyboardActions(
+                                onNext = { passwordFocusRequester.requestFocus() },
+                            ),
+                    )
+                    OutlinedTextField(
+                        value = viewModel.password,
+                        onValueChange = {
+                            viewModel.password = it
+                            viewModel.errorMessage = null
+                        },
+                        label = { Text("Password") },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 16.dp)
+                                .focusRequester(passwordFocusRequester),
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        enabled = !isLoading,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions =
+                            KeyboardActions(
+                                onDone = { viewModel.login(onLoginSuccess) },
+                            ),
+                    )
+                    Button(
+                        onClick = { viewModel.login(onLoginSuccess) },
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        enabled = !isLoading,
+                    ) {
+                        Text("Login")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onNavigateToRegister,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Go to Register (Debug)")
+                    }
                 }
             }
         }
@@ -233,7 +241,7 @@ fun RoleCard(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = modifier,
     ) {
         Row(

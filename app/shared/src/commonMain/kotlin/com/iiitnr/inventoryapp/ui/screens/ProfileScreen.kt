@@ -62,18 +62,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
+import coil3.compose.SubcomposeAsyncImage
 import com.iiitnr.inventoryapp.data.models.User
 import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.data.storage.ThemeSettings
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.NotificationBell
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.common.userRoleColor
+import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import com.iiitnr.inventoryapp.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -102,28 +105,32 @@ fun ProfileScreen(
 
     Scaffold(
         topBar = {
-            AppTopBar(
-                title = "Profile",
-                onNavigateBack = onNavigateBack,
-                maxContentWidth = 1280.dp,
-                actions = {
-                    ThemeModeButton(
-                        themeMode = themeMode,
-                        onThemeModeChange = { mode -> scope.launch { themeSettings.setThemeMode(mode) } },
-                    )
-                    NotificationBell(
-                        unreadCount = notificationsViewModel.unreadCount,
-                        onClick = onNavigateToNotifications,
-                    )
-                    TextButton(
-                        onClick = {
-                            viewModel.logout(onLogout)
-                        },
-                    ) {
-                        Text("Logout")
-                    }
-                },
-            )
+            Column {
+                AppTopBar(
+                    title = "Profile",
+                    onNavigateBack = onNavigateBack,
+                    maxContentWidth = NarrowContentWidth,
+                    actions = {
+                        ThemeModeButton(
+                            themeMode = themeMode,
+                            onThemeModeChange = { mode -> scope.launch { themeSettings.setThemeMode(mode) } },
+                        )
+                        NotificationBell(
+                            unreadCount = notificationsViewModel.unreadCount,
+                            onClick = onNavigateToNotifications,
+                        )
+                        TextButton(
+                            onClick = {
+                                viewModel.logout(onLogout)
+                            },
+                            modifier = Modifier.handCursor(),
+                        ) {
+                            Text("Logout")
+                        }
+                    },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
         },
     ) { paddingValues ->
         ProfileBody(
@@ -315,8 +322,9 @@ private fun UserAffiliationLine(
 @Composable
 private fun RoleBadge(role: UserRole) {
     val color = userRoleColor(role)
+    val badgeAlpha = if (LocalIsDarkTheme.current) 0.24f else 0.14f
     Surface(
-        color = color.copy(alpha = 0.14f),
+        color = color.copy(alpha = badgeAlpha),
         contentColor = color,
         shape = RoundedCornerShape(8.dp),
     ) {
@@ -500,33 +508,48 @@ fun ProfilePicture(
 ) {
     if (imageUrl != null) {
         val sanitizedUrl = imageUrl.replace("http://", "https://")
-        AsyncImage(
+        SubcomposeAsyncImage(
             model = sanitizedUrl,
             contentDescription = "Profile picture",
             modifier =
                 modifier
                     .size(size)
                     .clip(CircleShape),
+            contentScale = ContentScale.Crop,
+            loading = { ProfilePicturePlaceholder(size = size) },
+            error = { ProfilePicturePlaceholder(size = size) },
         )
     } else {
-        Surface(
-            modifier =
-                modifier
-                    .size(size)
-                    .clip(CircleShape),
-            color = MaterialTheme.colorScheme.surfaceVariant,
+        ProfilePicturePlaceholder(size = size, modifier = modifier)
+    }
+}
+
+/**
+ * Stand-in for a missing URL and for a failed load, so a broken profile picture
+ * never renders the platform broken-image glyph.
+ */
+@Composable
+private fun ProfilePicturePlaceholder(
+    size: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier =
+            modifier
+                .size(size)
+                .clip(CircleShape),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = null,
-                    modifier = Modifier.size(size / 2),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                modifier = Modifier.size(size / 2),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

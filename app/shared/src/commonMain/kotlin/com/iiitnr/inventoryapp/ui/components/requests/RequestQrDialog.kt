@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestStatus
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 
 const val REQUEST_QR_PREFIX = "inventoryapp://fulfill/"
@@ -78,7 +79,7 @@ fun RequestQrDialog(
                             },
                         style = MaterialTheme.typography.titleLarge,
                     )
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.handCursor()) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close",

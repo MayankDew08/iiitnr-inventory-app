@@ -40,8 +40,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
 import org.koin.compose.viewmodel.koinViewModel
@@ -59,11 +61,14 @@ fun FinesAdminScreen(
 
         Scaffold(
             topBar = {
-                AppTopBar(
-                    title = "Outstanding fines",
-                    onNavigateBack = onNavigateBack,
-                    maxContentWidth = if (isExpanded) 1280.dp else 900.dp,
-                )
+                Column {
+                    AppTopBar(
+                        title = "Outstanding fines",
+                        onNavigateBack = onNavigateBack,
+                        maxContentWidth = if (isExpanded) WideContentWidth else NarrowContentWidth,
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
             },
         ) { paddingValues ->
             Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -120,7 +125,7 @@ private fun FinesAdminContent(
     onStudentClick: (String) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(modifier = Modifier.widthIn(max = 900.dp).fillMaxSize()) {
+        LazyColumn(modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize()) {
             item { FinesAdminSummary(studentCount = students.size, grandTotal = grandTotal) }
 
             item {
@@ -164,7 +169,7 @@ private fun FinesAdminMasterDetail(
         contentAlignment = Alignment.TopCenter,
     ) {
         Row(
-            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            modifier = Modifier.widthIn(max = WideContentWidth).fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(modifier = Modifier.width(420.dp).fillMaxHeight()) {

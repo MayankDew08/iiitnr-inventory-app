@@ -62,7 +62,7 @@ fun AppTopBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (onNavigateBack != null) {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, modifier = Modifier.handCursor()) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",

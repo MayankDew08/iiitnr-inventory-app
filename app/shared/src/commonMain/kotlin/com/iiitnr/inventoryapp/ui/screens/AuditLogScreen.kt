@@ -49,9 +49,11 @@ import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.EmptyState
 import com.iiitnr.inventoryapp.ui.components.common.ErrorContent
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.PaginationBar
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.auditActionColor
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
@@ -108,7 +110,7 @@ private fun AuditLogContent(
             AppTopBar(
                 title = "Audit Log",
                 onNavigateBack = onNavigateBack,
-                maxContentWidth = if (isExpanded) 1280.dp else 1000.dp,
+                maxContentWidth = if (isExpanded) WideContentWidth else NarrowContentWidth,
             )
         },
     ) { paddingValues ->
@@ -118,7 +120,7 @@ private fun AuditLogContent(
             AuditFilterBar(
                 selectedAction = viewModel.selectedAction,
                 onActionSelected = { viewModel.onActionSelected(it) },
-                maxContentWidth = if (isExpanded) 1280.dp else 1000.dp,
+                maxContentWidth = if (isExpanded) WideContentWidth else NarrowContentWidth,
             )
 
             when {
@@ -144,7 +146,7 @@ private fun AuditLogContent(
                         onEntryClick = { selectedEntry = it },
                         modifier = Modifier.weight(1f),
                     )
-                    AuditLogPager(viewModel = viewModel, maxContentWidth = 1280.dp)
+                    AuditLogPager(viewModel = viewModel, maxContentWidth = WideContentWidth)
                 }
 
                 else -> {
@@ -153,7 +155,7 @@ private fun AuditLogContent(
                         onEntryClick = { selectedEntry = it },
                         modifier = Modifier.weight(1f),
                     )
-                    AuditLogPager(viewModel = viewModel, maxContentWidth = 1000.dp)
+                    AuditLogPager(viewModel = viewModel, maxContentWidth = NarrowContentWidth)
                 }
             }
         }
@@ -189,7 +191,7 @@ private fun AuditLogMasterDetail(
         contentAlignment = Alignment.TopCenter,
     ) {
         Row(
-            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            modifier = Modifier.widthIn(max = WideContentWidth).fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(modifier = Modifier.width(520.dp).fillMaxHeight()) {
@@ -238,7 +240,7 @@ private fun AuditLogList(
         contentAlignment = Alignment.TopCenter,
     ) {
         LazyColumn(
-            modifier = Modifier.widthIn(max = 1000.dp).fillMaxSize(),
+            modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize(),
             contentPadding =
                 PaddingValues(
                     start = 12.dp,
@@ -289,7 +291,7 @@ private fun AuditFilterBar(
     ) {
         LazyRow(
             modifier = Modifier.widthIn(max = maxContentWidth).fillMaxWidth().padding(vertical = 2.dp),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(0.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -387,9 +389,10 @@ internal fun AuditActionBadge(
     actionColor: Color,
     fontSize: TextUnit,
 ) {
+    val badgeAlpha = if (LocalIsDarkTheme.current) 0.24f else 0.14f
     Surface(
         shape = RoundedCornerShape(6.dp),
-        color = actionColor.copy(alpha = 0.12f),
+        color = actionColor.copy(alpha = badgeAlpha),
     ) {
         Text(
             text = actionLabels[action] ?: action,

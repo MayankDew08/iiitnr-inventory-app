@@ -41,6 +41,7 @@ import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
 import com.iiitnr.inventoryapp.ui.components.common.EmptyState
 import com.iiitnr.inventoryapp.ui.components.common.ErrorContent
 import com.iiitnr.inventoryapp.ui.components.common.LoadingIndicator
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.theme.LocalIsDarkTheme
 import com.iiitnr.inventoryapp.utils.currentToday
@@ -61,7 +62,7 @@ fun NotificationsScreen(
             AppTopBar(
                 title = "Notifications",
                 onNavigateBack = onNavigateBack,
-                maxContentWidth = 900.dp,
+                maxContentWidth = NarrowContentWidth,
                 actions = {
                     if (viewModel.unreadCount > 0) {
                         TextButton(onClick = { viewModel.markAllRead() }) {
@@ -117,7 +118,7 @@ private fun NotificationsBody(
                 contentAlignment = Alignment.TopCenter,
             ) {
                 LazyColumn(
-                    modifier = Modifier.widthIn(max = 900.dp).fillMaxSize(),
+                    modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {

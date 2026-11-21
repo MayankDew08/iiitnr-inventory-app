@@ -62,7 +62,7 @@ fun RequestCard(
 
     Card(
         modifier = modifier.fillMaxWidth().handCursor().clickable { onCardClick(request) },
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = cardShape,
         border = BorderStroke(borderWidth, borderColor),
         colors =

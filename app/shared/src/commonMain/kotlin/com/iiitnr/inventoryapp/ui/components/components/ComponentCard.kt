@@ -82,7 +82,7 @@ fun ComponentCard(
             AsyncImage(
                 model = enlargedImageUrl,
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize().clickable(onClick = { enlargedImageUrl = null }),
+                modifier = Modifier.fillMaxSize().handCursor().clickable(onClick = { enlargedImageUrl = null }),
                 contentScale = ContentScale.Fit,
             )
         }
@@ -131,14 +131,14 @@ fun ComponentCard(
                 }
                 Row {
                     if (!isReadOnly && cartQuantities.isEmpty()) {
-                        IconButton(onClick = onEdit) {
+                        IconButton(onClick = onEdit, modifier = Modifier.handCursor()) {
                             Icon(
                                 Icons.Default.Edit,
                                 contentDescription = "Edit",
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        IconButton(onClick = onDelete) {
+                        IconButton(onClick = onDelete, modifier = Modifier.handCursor()) {
                             Icon(
                                 Icons.Default.Delete,
                                 contentDescription = "Delete",
@@ -155,6 +155,7 @@ fun ComponentCard(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = { onUpdateCartQuantity?.invoke(-1) },
+                                modifier = Modifier.handCursor(),
                             ) {
                                 Icon(
                                     Icons.Default.Remove,
@@ -170,6 +171,7 @@ fun ComponentCard(
                             IconButton(
                                 onClick = { onUpdateCartQuantity?.invoke(1) },
                                 enabled = cartQuantity < component.availableQuantity,
+                                modifier = Modifier.handCursor(),
                             ) {
                                 Icon(
                                     Icons.Default.Add,

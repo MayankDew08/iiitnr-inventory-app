@@ -58,6 +58,7 @@ import com.iiitnr.inventoryapp.data.models.UserRole
 import com.iiitnr.inventoryapp.ui.components.common.ResponsiveContent
 import com.iiitnr.inventoryapp.ui.components.common.ScreenWidthClass
 import com.iiitnr.inventoryapp.ui.components.common.SearchBar
+import com.iiitnr.inventoryapp.ui.components.common.WideContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.FulfillByIdDialog
 import com.iiitnr.inventoryapp.ui.components.requests.RenewReasonDialog
@@ -564,7 +565,7 @@ private fun RequestsHeader(
         Column(
             modifier =
                 Modifier
-                    .widthIn(max = 1280.dp)
+                    .widthIn(max = WideContentWidth)
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -628,7 +629,7 @@ private fun RequestsMasterDetail(
         contentAlignment = Alignment.TopCenter,
     ) {
         Row(
-            modifier = Modifier.widthIn(max = 1280.dp).fillMaxSize(),
+            modifier = Modifier.widthIn(max = WideContentWidth).fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Box(modifier = Modifier.width(440.dp).fillMaxHeight()) {
@@ -782,7 +783,7 @@ private fun RequestsScreenScaffold(
                 onExportCsv = onExportCsv,
                 onNavigateToNotifications = onNavigateToNotifications,
                 unreadNotificationCount = unreadNotificationCount,
-                maxContentWidth = 1280.dp,
+                maxContentWidth = WideContentWidth,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -970,14 +971,14 @@ fun PartialIssueDialogContent(
                                 IconButton(
                                     onClick = { onItemQtyChange(compId, (qty + 1).coerceAtMost(remaining)) },
                                     enabled = fulfilled + qty < total,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(24.dp).handCursor(),
                                 ) {
                                     Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase")
                                 }
                                 IconButton(
                                     onClick = { onItemQtyChange(compId, (qty - 1).coerceAtLeast(0)) },
                                     enabled = qty > 0,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(24.dp).handCursor(),
                                 ) {
                                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease")
                                 }
@@ -1089,14 +1090,14 @@ fun PartialReturnDialogContent(
                                 IconButton(
                                     onClick = { onItemQtyChange(compId, (qty + 1).coerceAtMost(currentHeld)) },
                                     enabled = returned + qty < issued,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(24.dp).handCursor(),
                                 ) {
                                     Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase")
                                 }
                                 IconButton(
                                     onClick = { onItemQtyChange(compId, (qty - 1).coerceAtLeast(0)) },
                                     enabled = qty > 0,
-                                    modifier = Modifier.size(24.dp),
+                                    modifier = Modifier.size(24.dp).handCursor(),
                                 ) {
                                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease")
                                 }

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.ui.components.common.AppTopBar
+import com.iiitnr.inventoryapp.ui.components.common.NarrowContentWidth
 import com.iiitnr.inventoryapp.ui.components.common.handCursor
 import com.iiitnr.inventoryapp.ui.components.requests.RequestDetailDialog
 import com.iiitnr.inventoryapp.utils.currentToday
@@ -60,11 +61,14 @@ fun FinesAdminStudentDetailScreen(
 
     Scaffold(
         topBar = {
-            AppTopBar(
-                title = viewModel.studentName.ifEmpty { "Student" },
-                onNavigateBack = onNavigateBack,
-                maxContentWidth = 900.dp,
-            )
+            Column {
+                AppTopBar(
+                    title = viewModel.studentName.ifEmpty { "Student" },
+                    onNavigateBack = onNavigateBack,
+                    maxContentWidth = NarrowContentWidth,
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
         },
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
@@ -114,7 +118,7 @@ private fun StudentFinesContent(
     onRequestClick: (Request) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        LazyColumn(modifier = Modifier.widthIn(max = 900.dp).fillMaxSize()) {
+        LazyColumn(modifier = Modifier.widthIn(max = NarrowContentWidth).fillMaxSize()) {
             item {
                 Text(
                     text = "Overdue requests",
@@ -195,6 +199,7 @@ internal fun StudentFinesPane(
             CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
             ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Column(

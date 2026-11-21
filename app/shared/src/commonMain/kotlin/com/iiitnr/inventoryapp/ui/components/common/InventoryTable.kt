@@ -1,5 +1,6 @@
 package com.iiitnr.inventoryapp.ui.components.common
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -42,8 +43,10 @@ fun <T> InventoryTable(
             modifier = modifier.fillMaxWidth(),
             colors =
                 CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                 ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shape = RoundedCornerShape(8.dp),
         ) {
             TableContent(items, columns)

@@ -6,9 +6,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
@@ -17,7 +20,6 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
@@ -44,6 +46,7 @@ import com.iiitnr.inventoryapp.data.models.Component
 import com.iiitnr.inventoryapp.data.models.ComponentCategory
 import com.iiitnr.inventoryapp.data.models.ComponentLocation
 import com.iiitnr.inventoryapp.data.models.ComponentRequest
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 
 @Composable
 fun ComponentDialog(
@@ -115,6 +118,10 @@ fun ComponentDialog(
                     onRemoveImage()
                 },
                 isUploading = isUploading,
+                modifier =
+                    Modifier
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState()),
             )
         },
         confirmButton = {
@@ -172,8 +179,10 @@ private fun ComponentDialogFields(
     onTakePhoto: () -> Unit,
     onRemoveImage: () -> Unit,
     isUploading: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     Column(
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         val categoryOptions = ComponentCategory.labels
@@ -216,6 +225,7 @@ private fun ComponentDialogFields(
             ) {
                 TextButton(
                     onClick = onPickImage,
+                    modifier = Modifier.handCursor(),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     enabled = !isUploading,
                 ) {
@@ -229,6 +239,7 @@ private fun ComponentDialogFields(
                 }
                 TextButton(
                     onClick = onTakePhoto,
+                    modifier = Modifier.handCursor(),
                     contentPadding = PaddingValues(horizontal = 8.dp),
                     enabled = !isUploading,
                 ) {
@@ -244,6 +255,7 @@ private fun ComponentDialogFields(
                     IconButton(
                         onClick = onRemoveImage,
                         enabled = !isUploading,
+                        modifier = Modifier.handCursor(),
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
@@ -306,7 +318,7 @@ private fun ComponentDialogFields(
                     onTotalQuantityChange(newTotal)
                 },
                 enabled = quantityToAdd.isNotBlank(),
-                modifier = Modifier.align(Alignment.CenterVertically),
+                modifier = Modifier.align(Alignment.CenterVertically).handCursor(),
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -369,9 +381,10 @@ private fun CategoryDropdownField(
             singleLine = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
         )
-        DropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.exposedDropdownSize(matchAnchorWidth = true),
         ) {
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(option) }, onClick = {
@@ -411,9 +424,10 @@ private fun LocationDropdownField(
             singleLine = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
         )
-        DropdownMenu(
+        ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { onExpandedChange(false) },
+            modifier = Modifier.exposedDropdownSize(matchAnchorWidth = true),
         ) {
             options.forEach { option ->
                 DropdownMenuItem(text = { Text(option) }, onClick = {

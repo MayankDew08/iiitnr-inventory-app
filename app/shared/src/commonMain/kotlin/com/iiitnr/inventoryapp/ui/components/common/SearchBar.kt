@@ -35,7 +35,7 @@ fun SearchBar(
         },
         trailingIcon = {
             if (searchQuery.isNotBlank()) {
-                IconButton(onClick = { onSearchQueryChange("") }) {
+                IconButton(onClick = { onSearchQueryChange("") }, modifier = Modifier.handCursor()) {
                     Icon(
                         imageVector = Icons.Default.Clear,
                         contentDescription = "Clear search",

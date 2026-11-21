@@ -14,10 +14,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.iiitnr.inventoryapp.data.models.Request
 import com.iiitnr.inventoryapp.data.models.RequestStatus
+import com.iiitnr.inventoryapp.ui.components.common.handCursor
 
 @Composable
 fun RequestCardActions(
@@ -109,14 +111,14 @@ private fun PendingRequestActions(
 ) {
     if (isFaculty && onApproveRequest != null && onRejectRequest != null) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            IconButton(onClick = { onRejectRequest(request.id) }) {
+            IconButton(onClick = { onRejectRequest(request.id) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Reject request",
                     tint = MaterialTheme.colorScheme.error,
                 )
             }
-            IconButton(onClick = { onApproveRequest(request.id) }) {
+            IconButton(onClick = { onApproveRequest(request.id) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.Check,
                     contentDescription = "Approve request",
@@ -125,7 +127,7 @@ private fun PendingRequestActions(
             }
         }
     } else if (!isFaculty && onDeleteRequest != null) {
-        IconButton(onClick = { onDeleteRequest(request.id) }) {
+        IconButton(onClick = { onDeleteRequest(request.id) }, modifier = Modifier.handCursor()) {
             Icon(
                 imageVector = Icons.Default.Delete,
                 contentDescription = "Retract request",
@@ -144,7 +146,7 @@ private fun ApprovedRequestActions(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (!isFaculty && onShowQr != null) {
-            IconButton(onClick = { onShowQr(request) }) {
+            IconButton(onClick = { onShowQr(request) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.QrCode2,
                     contentDescription = "Show QR for LA to scan",
@@ -153,7 +155,7 @@ private fun ApprovedRequestActions(
             }
         }
         if (onFulfillRequest != null) {
-            IconButton(onClick = { onFulfillRequest(request.id) }) {
+            IconButton(onClick = { onFulfillRequest(request.id) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.DoneAll,
                     contentDescription = "Issue request",
@@ -182,7 +184,7 @@ private fun IssuedRequestActions(
         returnContentDescription = "Record return to inventory",
     )
     if (onFulfillRequest != null) {
-        IconButton(onClick = { onFulfillRequest(request.id) }) {
+        IconButton(onClick = { onFulfillRequest(request.id) }, modifier = Modifier.handCursor()) {
             Icon(
                 imageVector = Icons.Default.DoneAll,
                 contentDescription = "Issue more items",
@@ -199,7 +201,7 @@ private fun RequestedRenewActions(
     onApproveRenew: ((String) -> Unit)?,
 ) {
     if (isFaculty && onApproveRenew != null) {
-        IconButton(onClick = { onApproveRenew(request.id) }) {
+        IconButton(onClick = { onApproveRenew(request.id) }, modifier = Modifier.handCursor()) {
             Icon(
                 imageVector = Icons.Default.Check,
                 contentDescription = "Approve renewal request",
@@ -272,7 +274,7 @@ private fun RequestLifecycleActionRow(
 
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         if (showRenew && !isFaculty && onRequestRenew != null) {
-            IconButton(onClick = { onRequestRenew(request.id) }) {
+            IconButton(onClick = { onRequestRenew(request.id) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Request renewal",
@@ -281,7 +283,7 @@ private fun RequestLifecycleActionRow(
             }
         }
         if (!isFaculty && onShowQr != null && hasReturnableItems) {
-            IconButton(onClick = { onShowQr(request) }) {
+            IconButton(onClick = { onShowQr(request) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.Default.QrCode2,
                     contentDescription = qrContentDescription,
@@ -290,7 +292,7 @@ private fun RequestLifecycleActionRow(
             }
         }
         if (onReturnRequest != null && hasReturnableItems) {
-            IconButton(onClick = { onReturnRequest(request.id) }) {
+            IconButton(onClick = { onReturnRequest(request.id) }, modifier = Modifier.handCursor()) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.AssignmentReturn,
                     contentDescription = returnContentDescription,

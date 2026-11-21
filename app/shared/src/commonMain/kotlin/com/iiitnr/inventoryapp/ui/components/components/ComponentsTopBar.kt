@@ -70,7 +70,7 @@ fun ComponentsTopBar(
                 pendingRequestsCount = pendingRequestsCount,
             )
             onNavigateToFines?.let { nav ->
-                IconButton(onClick = nav) {
+                IconButton(onClick = nav, modifier = Modifier.handCursor()) {
                     Icon(
                         imageVector = Icons.Default.Payments,
                         contentDescription = "Fines",
@@ -85,6 +85,7 @@ fun ComponentsTopBar(
             }
             IconButton(
                 onClick = onNavigateToHome,
+                modifier = Modifier.handCursor(),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.AccountCircle,
@@ -111,7 +112,7 @@ private fun CsvActions(
     val showExport = showExportCsv && onExportCsv != null
 
     if (showImport) {
-        IconButton(onClick = onImportCsv, enabled = !isImportingCsv) {
+        IconButton(onClick = onImportCsv, enabled = !isImportingCsv, modifier = Modifier.handCursor()) {
             Icon(
                 imageVector = Icons.Outlined.FileUpload,
                 contentDescription = "Import CSV",
@@ -119,7 +120,7 @@ private fun CsvActions(
         }
     }
     if (showExport) {
-        IconButton(onClick = onExportCsv) {
+        IconButton(onClick = onExportCsv, modifier = Modifier.handCursor()) {
             Icon(
                 imageVector = Icons.Outlined.FileDownload,
                 contentDescription = "Export CSV",

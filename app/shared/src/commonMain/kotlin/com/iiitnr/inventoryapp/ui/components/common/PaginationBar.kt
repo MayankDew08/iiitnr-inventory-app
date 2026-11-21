@@ -70,6 +70,7 @@ fun PaginationBar(
                     IconButton(
                         onClick = onPrevious,
                         enabled = currentOffset > 0,
+                        modifier = Modifier.handCursor(),
                     ) {
                         Icon(Icons.Default.ChevronLeft, "Previous")
                     }
@@ -81,6 +82,7 @@ fun PaginationBar(
                     IconButton(
                         onClick = onNext,
                         enabled = currentOffset + pageSize < totalCount,
+                        modifier = Modifier.handCursor(),
                     ) {
                         Icon(Icons.Default.ChevronRight, "Next")
                     }
